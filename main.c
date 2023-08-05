@@ -7,20 +7,32 @@ void error_handle_glfw(int e, const char* msg) {
 }
 
 int main() {
+    int error_code = 0;
     glfwInit();
     glfwSetErrorCallback(&error_handle_glfw);
+    if (!glfwVulkanSupported()) {
+        perror("ERR: GLFW+Vulkan not supported");
+        goto exit_GLFW;
+    }
     GLFWmonitor* monitor = glfwGetPrimaryMonitor();
     if (!monitor) {
         perror("The program screams in panic as it cannot find your primary monitor");
-        return -1;
+        error_code = -1;
+        goto exit_GLFW;
     }
-    GLFWwindow* window = NULL;
-    glfwCreateWindow(1000, 1000, "Hello Window", NULL, window);
-    if (!window) {
-       perror("ERR: no window...");
+    GLFWwindow* window = glfwCreateWindow(1000, 1000, "Hello Window", NULL, NULL);
+    if (window == NULL) {
+        perror("ERR: no window...");
+        error_code = -1;
+        goto exit_window;
     }
+    while (!glfwWindowShouldClose(window) && glfwGetMouseButton(window, 1) != GLFW_PRESS) {
+        glfwPollEvents();
+    }
+    printf("Exiting normally!!");
+exit_window:
     glfwDestroyWindow(window);
+exit_GLFW:
     glfwTerminate();
-    printf("Program Exiting Normally\n");
-    return 0;
+    return error_code;
 }
