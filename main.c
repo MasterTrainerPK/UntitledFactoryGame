@@ -113,6 +113,120 @@ int main() {
     );
     VkQueue queue;
     vkGetDeviceQueue(device, queue_family_index, 0, &queue);
+    VkCommandPool command_pool;
+    vkCreateCommandPool( device,
+                    &(VkCommandPoolCreateInfo) {
+                        .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+                        .pNext = NULL,
+                        .flags = 0x0,
+                        .queueFamilyIndex = queue_family_index
+                    },
+                   NULL,
+                   &command_pool
+    );
+    VkCommandBuffer command_buffer;
+    VkCommandBuffer command_buffer_array[1] = {command_buffer};
+    vkAllocateCommandBuffers( device,
+                    &(VkCommandBufferAllocateInfo) {
+                        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+                        .pNext = NULL,
+                        .commandPool = command_pool,
+                        .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+                        .commandBufferCount = 1
+                    },
+                   command_buffer_array
+    );
+    VkAttachmentDescription attachment_description = (VkAttachmentDescription) {
+                        .flags = 0x0,
+                        .format = VK_IMAGE_ASPECT_COLOR_BIT,
+                        .samples = VK_SAMPLE_COUNT_1_BIT,
+                        .loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
+                        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+                        .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
+                        .stencilStoreOp = VK_ATTACHMENT_STORE_OP_STORE,
+                        .initialLayout = VK_IMAGE_LAYOUT_GENERAL,
+                        .finalLayout = VK_IMAGE_LAYOUT_GENERAL
+    };
+    VkAttachmentDescription attachment_description_array[1] = {attachment_description};
+    VkAttachmentReference attachment_reference = (VkAttachmentReference) {
+                        .attachment = 0,
+                        .layout = VK_IMAGE_LAYOUT_GENERAL
+    };
+    VkAttachmentReference attachment_reference_array[1] = {attachment_reference};
+    VkSubpassDescription subpass_description = (VkSubpassDescription) {
+                        .flags = 0x0,
+                        .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
+                        .inputAttachmentCount = 1,
+                        .pInputAttachments = attachment_reference_array,
+                        .colorAttachmentCount = 1,
+                        .pColorAttachments = attachment_reference_array,
+                        .pResolveAttachments = attachment_reference_array,
+                        .pDepthStencilAttachment = &attachment_reference,
+                        .preserveAttachmentCount = 0,
+                        .pPreserveAttachments = NULL
+
+    };
+    VkSubpassDescription subpass_description_array[1] = {subpass_description};
+    VkSubpassDependency subpass_dependency = (VkSubpassDependency) {
+                        .srcSubpass = 0,
+                        .dstSubpass = 0,
+                        .srcStageMask = 0x0,
+                        .dstStageMask = 0x0,
+                        .srcAccessMask = 0x0,
+                        .dstAccessMask = 0x0,
+                        .dependencyFlags = 0x0
+    };
+    VkSubpassDependency subpass_dependency_array[1] = {subpass_dependency};
+    VkRenderPass render_pass;
+    vkCreateRenderPass( device,
+                    &(VkRenderPassCreateInfo) {
+                        .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
+                        .pNext = NULL,
+                        .flags = 0x0,
+                        .attachmentCount = 1,
+                        .pAttachments = attachment_description_array,
+                        .subpassCount = 1,
+                        .pSubpasses = subpass_description_array,
+                        .dependencyCount = 1,
+                        .pDependencies = subpass_dependency_array
+                    },
+                    NULL,
+                    &render_pass
+    );
+    VkFramebuffer framebuffer;
+    vkCreateFrameBuffer( device,
+                    &(VkFramebufferCreateInfo) {
+                        .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
+                        .pNext = NULL,
+                        .flags = 0x0,
+                        .renderPass = render_pass,
+                        .attachmentCount = 1,
+                        .pAttachments = attachment_description_array,
+                        .width = 1,
+                        .height = 1, 
+                        .layers = 1
+                    },
+                    NULL,
+                    &framebuffer
+    );
+    vkBeginCommandBuffer( command_buffer,
+                    &(VkCommandBufferBeginInfo) {
+                        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+                        .pNext = NULL,
+                        .flags = 0x0,
+                        .pInheritanceInfo = &(VkCommandBufferInheritanceInfo) {
+                            .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_INFO,
+                            .pNext = NULL,
+                            .renderPass = render_pass,
+                            .subpass = 0,
+                            .framebuffer = framebuffer,
+                            .occlusionQueryEnable = VK_TRUE,
+                            .queryFlags = 0x0,
+                            .pipelineStatistics = 0x0,
+                        }
+                    }
+    );
+    
 
     GLFWmonitor* monitor = glfwGetPrimaryMonitor();
     //FIXME: give this a fallback
@@ -134,6 +248,7 @@ int main() {
 exit_window:
     glfwDestroyWindow(window);
 exit_vulkan:
+    vkFreeCommandBuffers(device, command_pool, 1, command_buffer_array);
     vkDestroyInstance(vulkan_instance, NULL);
 exit_GLFW:
     glfwTerminate();
