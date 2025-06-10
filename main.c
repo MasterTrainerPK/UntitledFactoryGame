@@ -111,6 +111,59 @@ int main() {
                    NULL,
                    &device
     );
+
+    GLFWmonitor* monitor = glfwGetPrimaryMonitor();
+    //FIXME: give this a fallback
+    if (!monitor) {
+        perror("ERR: The program cannot find your primary monitor");
+        error_code = -1;
+        goto exit_GLFW;
+    }
+    GLFWwindow* window = glfwCreateWindow(1000, 1000, "Hello Window", NULL, NULL);
+    if (window == NULL) {
+        perror("ERR: no window...");
+        error_code = -1;
+        goto exit_window;
+    }
+
+    VkSurfaceKHR surface;
+    glfwCreateWindowSurface( vulkan_instance,
+                    window,
+                    NULL,
+                    &surface
+    );
+    int width, height;
+    glfwGetFramebufferSize(window, &width, &height);
+    VkExtent2D image_extent = (VkExtent2D) {
+                    .width = width,
+                    .height = height
+    };
+    int queue_family_indices[1] = {queue_family_index};
+    VkSwapchainKHR swapchain;
+    vkCreateSwapchainKHR( device,
+                    &(VkSwapchainCreateInfoKHR) {
+                        .sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
+                        .pNext = NULL,
+                        .flags = 0x0,
+                        .surface = surface,
+                        .minImageCount = 1,
+                        .imageFormat = VK_FORMAT_UNDEFINED,
+                        .imageColorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR,
+                        .imageExtent = image_extent,
+                        .imageArrayLayers = 1,
+                        .imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+                        .imageSharingMode = VK_SHARING_MODE_CONCURRENT,
+                        .queueFamilyIndexCount = queue_family_index,
+                        .pQueueFamilyIndices = queue_family_indices,
+                        .preTransform = 0x0,
+                        .compositeAlpha = 0x0,
+                        .presentMode = VK_PRESENT_MODE_MAILBOX_KHR,
+                        .clipped = VK_TRUE,
+                        .oldSwapchain = VK_NULL_HANDLE
+                    },
+                    NULL,
+                    &swapchain
+    );
     VkQueue queue;
     vkGetDeviceQueue(device, queue_family_index, 0, &queue);
     VkCommandPool command_pool;
@@ -140,28 +193,28 @@ int main() {
                         .flags = 0x0,
                         .format = VK_IMAGE_ASPECT_COLOR_BIT,
                         .samples = VK_SAMPLE_COUNT_1_BIT,
-                        .loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
+                        .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
                         .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-                        .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
-                        .stencilStoreOp = VK_ATTACHMENT_STORE_OP_STORE,
-                        .initialLayout = VK_IMAGE_LAYOUT_GENERAL,
-                        .finalLayout = VK_IMAGE_LAYOUT_GENERAL
+                        .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+                        .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+                        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+                        .finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR
     };
     VkAttachmentDescription attachment_description_array[1] = {attachment_description};
     VkAttachmentReference attachment_reference = (VkAttachmentReference) {
                         .attachment = 0,
-                        .layout = VK_IMAGE_LAYOUT_GENERAL
+                        .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
     };
     VkAttachmentReference attachment_reference_array[1] = {attachment_reference};
     VkSubpassDescription subpass_description = (VkSubpassDescription) {
                         .flags = 0x0,
                         .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
-                        .inputAttachmentCount = 1,
-                        .pInputAttachments = attachment_reference_array,
+                        .inputAttachmentCount = 0,
+                        .pInputAttachments = NULL,
                         .colorAttachmentCount = 1,
                         .pColorAttachments = attachment_reference_array,
-                        .pResolveAttachments = attachment_reference_array,
-                        .pDepthStencilAttachment = &attachment_reference,
+                        .pResolveAttachments = NULL,
+                        .pDepthStencilAttachment = NULL,
                         .preserveAttachmentCount = 0,
                         .pPreserveAttachments = NULL
 
@@ -187,8 +240,8 @@ int main() {
                         .pAttachments = attachment_description_array,
                         .subpassCount = 1,
                         .pSubpasses = subpass_description_array,
-                        .dependencyCount = 1,
-                        .pDependencies = subpass_dependency_array
+                        .dependencyCount = 0,
+                        .pDependencies = NULL
                     },
                     NULL,
                     &render_pass
@@ -226,21 +279,7 @@ int main() {
                         }
                     }
     );
-    
 
-    GLFWmonitor* monitor = glfwGetPrimaryMonitor();
-    //FIXME: give this a fallback
-    if (!monitor) {
-        perror("ERR: The program cannot find your primary monitor");
-        error_code = -1;
-        goto exit_GLFW;
-    }
-    GLFWwindow* window = glfwCreateWindow(1000, 1000, "Hello Window", NULL, NULL);
-    if (window == NULL) {
-        perror("ERR: no window...");
-        error_code = -1;
-        goto exit_window;
-    }
     while (!glfwWindowShouldClose(window) && glfwGetMouseButton(window, 1) != GLFW_PRESS) {
         glfwPollEvents();
     }
