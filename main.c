@@ -246,15 +246,70 @@ int main() {
                     NULL,
                     &render_pass
     );
+    
+    VkExtent3D extent = (VkExtent3D) {
+        .width = width,
+        .height = height,
+        .depth = 1
+    };
+    VkImage image;
+    vkCreateImage( device,
+                    &(VkImageCreateInfo) {
+                        .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+                        .pNext = NULL,
+                        .flags = 0x0,
+                        .imageType = VK_IMAGE_TYPE_2D,
+                        .format = VK_FORMAT_UNDEFINED,
+                        .extent = extent,
+                        .mipLevels = 1,
+                        .arrayLayers = 1,
+                        .samples = 0x0,
+                        .tiling = VK_IMAGE_TILING_OPTIMAL,
+                        .usage = 0x0,
+                        .sharingMode = VK_SHARING_MODE_CONCURRENT,
+                        .queueFamilyIndexCount = 1,
+                        .pQueueFamilyIndices = queue_family_indices,
+                        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED
+                    },
+                    NULL,
+                    &image
+    );
+    VkImageView image_view;
+    vkCreateImageView( device,
+                    &(VkImageViewCreateInfo) {
+                        .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+                        .pNext = NULL,
+                        .flags = 0x0,
+                        .image = image,
+                        .viewType = VK_IMAGE_VIEW_TYPE_2D,
+                        .format = VK_FORMAT_UNDEFINED,
+                        .components = (VkComponentMapping) {
+                            .r = VK_COMPONENT_SWIZZLE_R,
+                            .g = VK_COMPONENT_SWIZZLE_G,
+                            .b = VK_COMPONENT_SWIZZLE_B,
+                            .a = VK_COMPONENT_SWIZZLE_A,
+                        },
+                        .subresourceRange = (VkImageSubresourceRange) {
+                            .aspectMask = 0x0,
+                            .baseMipLevel = 1,
+                            .levelCount = 1,
+                            .baseArrayLayer = 1,
+                            .layerCount = 1
+                        }
+                    },
+                    NULL,
+                    &image_view
+    );
+    VkImageView image_view_array[1] = {image_view};
     VkFramebuffer framebuffer;
-    vkCreateFrameBuffer( device,
+    vkCreateFramebuffer( device,
                     &(VkFramebufferCreateInfo) {
                         .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
                         .pNext = NULL,
                         .flags = 0x0,
                         .renderPass = render_pass,
                         .attachmentCount = 1,
-                        .pAttachments = attachment_description_array,
+                        .pAttachments = image_view_array,
                         .width = 1,
                         .height = 1, 
                         .layers = 1
@@ -279,6 +334,15 @@ int main() {
                         }
                     }
     );
+
+    FILE *f = fopen("shaders/vert.spv", "rb");
+    fseek(f, 0, SEEK_END);
+    long fsize = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    char *vert_shader_code = malloc(fsize);
+    fread(vert_shader_code, CHAR_BIT, fsize, f);
+    fclose(f);
+    printf(vert_shader_code);
 
     while (!glfwWindowShouldClose(window) && glfwGetMouseButton(window, 1) != GLFW_PRESS) {
         glfwPollEvents();
