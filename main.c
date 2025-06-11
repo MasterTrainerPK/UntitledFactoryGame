@@ -1,10 +1,53 @@
-#include <math.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <vulkan/vulkan.h>
 #include <GLFW/glfw3.h>
 #include <vulkan/vulkan_core.h>
+
+const char* handle_error_type(int vk_result) {
+    switch(vk_result) {
+    case VK_ERROR_OUT_OF_HOST_MEMORY: return "A host memory allocation has failed.";
+    case VK_ERROR_OUT_OF_DEVICE_MEMORY: return "A device memory allocation has failed.";
+    case VK_ERROR_INITIALIZATION_FAILED: return "Initialization of an object could not be completed for implementation-specific reasons.";
+    case VK_ERROR_DEVICE_LOST: return "The logical or physical device has been lost. See Lost Device";
+    case VK_ERROR_MEMORY_MAP_FAILED: return "Mapping of a memory object has failed.";
+    case VK_ERROR_LAYER_NOT_PRESENT: return "A requested layer is not present or could not be loaded.";
+    case VK_ERROR_EXTENSION_NOT_PRESENT: return "A requested extension is not supported.";
+    case VK_ERROR_FEATURE_NOT_PRESENT: return "A requested feature is not supported.";
+    case VK_ERROR_INCOMPATIBLE_DRIVER: return "The requested version of Vulkan is not supported by the driver or is otherwise incompatible for implementation-specific reasons.";
+    case VK_ERROR_TOO_MANY_OBJECTS: return "Too many objects of the type have already been created.";
+    case VK_ERROR_FORMAT_NOT_SUPPORTED: return "A requested format is not supported on this device.";
+    case VK_ERROR_FRAGMENTED_POOL: return "A pool allocation has failed due to fragmentation of the pool’s memory. This must only be returned if no attempt to allocate host or device memory was made to accommodate the new allocation. This should be returned in preference to VK_ERROR_OUT_OF_POOL_MEMORY, but only if the implementation is certain that the pool allocation failure was due to fragmentation.";
+    case VK_ERROR_SURFACE_LOST_KHR: return "A surface is no longer available.";
+    case VK_ERROR_NATIVE_WINDOW_IN_USE_KHR: return "The requested window is already in use by Vulkan or another API in a manner which prevents it from being used again.";
+    case VK_ERROR_OUT_OF_DATE_KHR: return "A surface has changed in such a way that it is no longer compatible with the swapchain, and further presentation requests using the swapchain will fail. Applications must query the new surface properties and recreate their swapchain if they wish to continue presenting to the surface.";
+    case VK_ERROR_INCOMPATIBLE_DISPLAY_KHR: return "The display used by a swapchain does not use the same presentable image layout, or is incompatible in a way that prevents sharing an image.";
+    case VK_ERROR_INVALID_SHADER_NV: return "One or more shaders failed to compile or link. More details are reported back to the application via VK_EXT_debug_report if enabled.";
+    case VK_ERROR_OUT_OF_POOL_MEMORY: return "A pool memory allocation has failed. This must only be returned if no attempt to allocate host or device memory was made to accommodate the new allocation. If the failure was definitely due to fragmentation of the pool, VK_ERROR_FRAGMENTED_POOL should be returned instead.";
+    case VK_ERROR_INVALID_EXTERNAL_HANDLE: return "An external handle is not a valid handle of the specified type.";
+    case VK_ERROR_FRAGMENTATION: return "A descriptor pool creation has failed due to fragmentation.";
+    case VK_ERROR_INVALID_DEVICE_ADDRESS_EXT: return "A buffer creation failed because the requested address is not available, A buffer creation or memory allocation failed because the requested address is not available, or A shader group handle assignment failed because the requested shader group handle information is no longer valid.";
+    case VK_ERROR_FULL_SCREEN_EXCLUSIVE_MODE_LOST_EXT: return "An operation on a swapchain created with VK_FULL_SCREEN_EXCLUSIVE_APPLICATION_CONTROLLED_EXT failed as it did not have exclusive full-screen access. This may occur due to implementation-dependent reasons, outside of the application’s control.";
+    case VK_ERROR_VALIDATION_FAILED_EXT: return "A command failed because invalid usage was detected by the implementation or a validation-layer.";
+    case VK_ERROR_COMPRESSION_EXHAUSTED_EXT: return "An image creation failed because internal resources required for compression are exhausted. This must only be returned when fixed-rate compression is requested.";
+    case VK_ERROR_IMAGE_USAGE_NOT_SUPPORTED_KHR: return "The requested VkImageUsageFlags are not supported.";
+    case VK_ERROR_VIDEO_PICTURE_LAYOUT_NOT_SUPPORTED_KHR: return "The requested video picture layout is not supported.";
+    case VK_ERROR_VIDEO_PROFILE_OPERATION_NOT_SUPPORTED_KHR: return "A video profile operation specified via VkVideoProfileInfoKHR::videoCodecOperation is not supported.";
+    case VK_ERROR_VIDEO_PROFILE_FORMAT_NOT_SUPPORTED_KHR: return "Format parameters in a requested VkVideoProfileInfoKHR chain are not supported.";
+    case VK_ERROR_VIDEO_PROFILE_CODEC_NOT_SUPPORTED_KHR: return "Codec-specific parameters in a requested VkVideoProfileInfoKHR chain are not supported.";
+    case VK_ERROR_VIDEO_STD_VERSION_NOT_SUPPORTED_KHR: return "The specified video Std header version is not supported.";
+    case VK_ERROR_INVALID_VIDEO_STD_PARAMETERS_KHR: return "The specified Video Std parameters do not adhere to the syntactic or semantic requirements of the used video compression standard, or values derived from parameters according to the rules defined by the used video compression standard do not adhere to the capabilities of the video compression standard or the implementation.";
+    case VK_ERROR_NOT_PERMITTED: return "The driver implementation has denied a request to acquire a priority above the default priority (VK_QUEUE_GLOBAL_PRIORITY_MEDIUM_EXT) because the application does not have sufficient privileges.";
+    case VK_ERROR_NOT_ENOUGH_SPACE_KHR: return "The application did not provide enough space to return all the required data.";
+    case VK_ERROR_UNKNOWN: return "An unknown error has occurred; either the application has provided invalid input, or an implementation failure has occurred.";
+    default: return "UNKNOWN UNKNOWN :/";
+    }
+}
+#define handle_error(coolio, ahh) {vk_result = coolio; do{if(vk_result != VK_SUCCESS) {\
+        fprintf(stderr,\
+                 "ERR at %s, line %d:  %s",\
+         __FILE__, __LINE__, handle_error_type(vk_result)); error_code = EXIT_FAILURE; goto ahh;}} while(0);}
 
 void error_handle_glfw(int e, const char* msg) {
     fprintf(stderr, "GLFW ERR: %d, MSG: %s", e, msg);
@@ -28,13 +71,12 @@ int main() {
         goto exit_GLFW;
     }
 
-    uint32_t count;
-    const char** extensions = glfwGetRequiredInstanceExtensions(&count);
+    uint32_t instance_extension_count;
+    const char** extensions = glfwGetRequiredInstanceExtensions(&instance_extension_count);
     uint32_t layer_count = 1;
     const char* layers[1] = {"VK_LAYER_KHRONOS_validation"};
     VkInstance vulkan_instance;
-
-    vk_result = vkCreateInstance(&(VkInstanceCreateInfo) {
+    handle_error(vkCreateInstance(&(VkInstanceCreateInfo) {
         .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
         .pNext = NULL,
         .flags = 0x0,
@@ -45,35 +87,46 @@ int main() {
             .applicationVersion = 0,
             .pEngineName = "Tuntomite",
             .engineVersion = 0,
-            .apiVersion = VK_VERSION_1_3
+            .apiVersion = VK_API_VERSION_1_3
         },
-        .enabledLayerCount = 0,
-        .ppEnabledLayerNames = NULL,
-        .enabledExtensionCount = 0,
-        .ppEnabledExtensionNames = NULL
-    }, NULL, &vulkan_instance);
+        .enabledLayerCount = 1,
+        .ppEnabledLayerNames = layers,
+        .enabledExtensionCount = instance_extension_count,
+        .ppEnabledExtensionNames = extensions
+    }, NULL, &vulkan_instance), exit_GLFW);
     //FIXME: Really bad error handling, maybe use something like a monad? or maybe engage in black magic one-line macros for filename and
-    if (vk_result != VK_SUCCESS) {
+    VkPhysicalDevice physical_device;
+    {
+    int type_to_prio[5] = { 4, 1, 0, 2, 3 };
+    uint32_t num_physical_devices = 0;
+    handle_error(vkEnumeratePhysicalDevices(vulkan_instance, &num_physical_devices, NULL), destroy_instance);
+    VkPhysicalDevice* physical_devices = malloc(sizeof(VkPhysicalDevice)*num_physical_devices);
+    handle_error(vkEnumeratePhysicalDevices(vulkan_instance, &num_physical_devices, physical_devices), destroy_instance);
+    int best_i = 0;
+    int best_prio = 5;
+    for( int i = 0; i < num_physical_devices; i++) {
+            VkPhysicalDeviceProperties properties;
+            vkGetPhysicalDeviceProperties(physical_devices[i], &properties);
+            if(type_to_prio[properties.deviceType] < best_prio) {
+                best_i = i;
+                best_prio = type_to_prio[properties.deviceType];
+            }
+    }
+    physical_device = physical_devices[best_i];
+    free(physical_devices);
+    }
+    if(vk_result != VK_SUCCESS) {
         switch (vk_result) {
-        case VK_ERROR_LAYER_NOT_PRESENT:
-            perror("ERR: Layer not found");
-            break;
-        case VK_ERROR_EXTENSION_NOT_PRESENT:
-            perror("ERR: Extension not found");
-            break;
-        case VK_ERROR_INCOMPATIBLE_DRIVER:
-            perror("ERR: Incompatible or Missing Driver");
+        case VK_ERROR_INITIALIZATION_FAILED:
+            perror("ERR: Failed initialization");
             break;
         default:
-            perror("ERR: Function not up to spec or u ran out of memory????");
+            perror("ERR: Out of memory??");
+            break;
         }
-        perror("ERR: vulkan_instance failed");
-        error_code = EXIT_FAILURE;
-        goto exit_GLFW;
-    };
-    uint32_t num_physical_devices = 1;
-    VkPhysicalDevice physical_device = malloc(sizeof(VkPhysicalDevice)*num_physical_devices);
-    vk_result = vkEnumeratePhysicalDevices(vulkan_instance, &num_physical_devices, &physical_device);
+        perror("ERR: failed to enumerate devices");
+        goto destroy_instance;
+    }
     uint32_t queue_family_num;
     vkGetPhysicalDeviceQueueFamilyProperties(physical_device, &queue_family_num, NULL);
     VkQueueFamilyProperties* queue_family_properties = malloc(sizeof(VkQueueFamilyProperties)*queue_family_num);
@@ -84,11 +137,12 @@ int main() {
         if (queue_family_index == queue_family_num) {
             perror("ERR: Can't find graphics queue!!");
             error_code = EXIT_FAILURE;
-            goto exit_vulkan;
+            goto destroy_instance;
         }
     }
     VkDevice device;
-    vkCreateDevice( physical_device,
+    handle_error(
+        vkCreateDevice( physical_device,
                     &(VkDeviceCreateInfo) {
                         .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
                         .pNext = NULL,
@@ -110,16 +164,16 @@ int main() {
                     },
                    NULL,
                    &device
-    );
+    ), destroy_instance);
 
     GLFWmonitor* monitor = glfwGetPrimaryMonitor();
     //FIXME: give this a fallback
     if (!monitor) {
         perror("ERR: The program cannot find your primary monitor");
         error_code = -1;
-        goto exit_GLFW;
+        goto destory_device;
     }
-    GLFWwindow* window = glfwCreateWindow(1000, 1000, "Hello Window", NULL, NULL);
+    GLFWwindow* window = glfwCreateWindow(1000, 1000, "Hello Window", monitor, NULL);
     if (window == NULL) {
         perror("ERR: no window...");
         error_code = -1;
@@ -352,6 +406,9 @@ exit_window:
     glfwDestroyWindow(window);
 exit_vulkan:
     vkFreeCommandBuffers(device, command_pool, 1, command_buffer_array);
+destory_device:
+    vkDestroyDevice(device, NULL);
+destroy_instance:
     vkDestroyInstance(vulkan_instance, NULL);
 exit_GLFW:
     glfwTerminate();
