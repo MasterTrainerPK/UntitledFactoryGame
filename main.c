@@ -72,7 +72,19 @@ int main() {
     }
 
     uint32_t instance_extension_count;
-    const char** extensions = glfwGetRequiredInstanceExtensions(&instance_extension_count);
+    const char** extensions;
+    {
+    const char** glfw_extensions = glfwGetRequiredInstanceExtensions(&instance_extension_count);
+    extensions = malloc(sizeof(char*) * instance_extension_count + 0);
+    for(int i = 0; i < instance_extension_count; i++) {
+        extensions[i] = glfw_extensions[i];
+    }
+    //extensions[instance_extension_count] = "VK_KHR_swapchain";
+    printf("Loading Extensions\n");
+    for(int i = 0; i < instance_extension_count; i++) {
+        printf("%s\n", extensions[i]);
+    }
+    }
     uint32_t layer_count = 1;
     const char* layers[1] = {"VK_LAYER_KHRONOS_validation"};
     VkInstance vulkan_instance;
@@ -141,6 +153,7 @@ int main() {
         }
     }
     VkDevice device;
+    const char* const device_extension[1] = {"VK_KHR_swapchain"};
     handle_error(
         vkCreateDevice( physical_device,
                     &(VkDeviceCreateInfo) {
@@ -158,8 +171,8 @@ int main() {
                         },
                         .enabledLayerCount = 0,
                         .ppEnabledLayerNames = NULL,
-                        .enabledExtensionCount = 0,
-                        .ppEnabledExtensionNames = NULL,
+                        .enabledExtensionCount = 1,
+                        .ppEnabledExtensionNames = device_extension,
                         .pEnabledFeatures = NULL
                     },
                    NULL,
@@ -173,6 +186,7 @@ int main() {
         error_code = -1;
         goto destory_device;
     }
+    glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
     GLFWwindow* window = glfwCreateWindow(1000, 1000, "Hello Window", NULL, NULL);
     if (window == NULL) {
         perror("ERR: no window...");
@@ -192,7 +206,7 @@ int main() {
                     .width = width,
                     .height = height
     };
-    int queue_family_indices[1] = {queue_family_index};
+    uint queue_family_indices[1] = {queue_family_index};
     VkSwapchainKHR swapchain;
     vkCreateSwapchainKHR( device,
                     &(VkSwapchainCreateInfoKHR) {
@@ -300,7 +314,6 @@ int main() {
                     NULL,
                     &render_pass
     );
-    
     VkExtent3D extent = (VkExtent3D) {
         .width = width,
         .height = height,
@@ -408,7 +421,7 @@ int main() {
     char *vert_shader_code = malloc(fsize);
     fread(vert_shader_code, sizeof(char), fsize, f);
     fclose(f);
-    printf(vert_shader_code);
+    printf("%s", vert_shader_code);
 
     while (!glfwWindowShouldClose(window) && glfwGetMouseButton(window, 1) != GLFW_PRESS) {
         glfwPollEvents();
