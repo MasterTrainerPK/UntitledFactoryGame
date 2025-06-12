@@ -109,6 +109,7 @@ int main() {
     //FIXME: Really bad error handling, maybe use something like a monad? or maybe engage in black magic one-line macros for filename and
     VkPhysicalDevice physical_device;
     {
+    // order of priority is descrete, integrated, virtual, cpu, other
     int type_to_prio[5] = { 4, 1, 0, 2, 3 };
     uint32_t num_physical_devices = 0;
     handle_error(vkEnumeratePhysicalDevices(vulkan_instance, &num_physical_devices, NULL), destroy_instance);
@@ -122,22 +123,13 @@ int main() {
             if(type_to_prio[properties.deviceType] < best_prio) {
                 best_i = i;
                 best_prio = type_to_prio[properties.deviceType];
+                if(best_prio == 0) {
+                    break;
+                }
             }
     }
     physical_device = physical_devices[best_i];
     free(physical_devices);
-    }
-    if(vk_result != VK_SUCCESS) {
-        switch (vk_result) {
-        case VK_ERROR_INITIALIZATION_FAILED:
-            perror("ERR: Failed initialization");
-            break;
-        default:
-            perror("ERR: Out of memory??");
-            break;
-        }
-        perror("ERR: failed to enumerate devices");
-        goto destroy_instance;
     }
     uint32_t queue_family_num;
     vkGetPhysicalDeviceQueueFamilyProperties(physical_device, &queue_family_num, NULL);
@@ -145,7 +137,7 @@ int main() {
     vkGetPhysicalDeviceQueueFamilyProperties(physical_device, &queue_family_num, queue_family_properties);
     int queue_family_index;
     for (queue_family_index = 0;
-        !(queue_family_properties[queue_family_index].queueFlags | 0x1); queue_family_index++ ) {
+        !(queue_family_properties[queue_family_index].queueFlags | VK_QUEUE_GRAPHICS_BIT); queue_family_index++ ) {
         if (queue_family_index == queue_family_num) {
             perror("ERR: Can't find graphics queue!!");
             error_code = EXIT_FAILURE;
@@ -191,15 +183,15 @@ int main() {
     if (window == NULL) {
         perror("ERR: no window...");
         error_code = -1;
-        goto exit_window;
+        goto destroy_window;
     }
 
     VkSurfaceKHR surface;
-    glfwCreateWindowSurface( vulkan_instance,
+    handle_error(glfwCreateWindowSurface( vulkan_instance,
                     window,
                     NULL,
                     &surface
-    );
+    ), destroy_window);
     int width, height;
     glfwGetFramebufferSize(window, &width, &height);
     VkExtent2D image_extent = (VkExtent2D) {
@@ -427,10 +419,10 @@ int main() {
         glfwPollEvents();
     }
     printf("Exiting normally!!\n\n");
-exit_window:
-    glfwDestroyWindow(window);
-exit_vulkan:
+free_command_buffers:
     vkFreeCommandBuffers(device, command_pool, 1, command_buffer_array);
+destroy_window:
+    glfwDestroyWindow(window);
 destory_device:
     vkDestroyDevice(device, NULL);
 destroy_instance:
