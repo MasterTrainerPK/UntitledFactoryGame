@@ -250,6 +250,7 @@ int main() {
                     NULL,
                     &swapchain
     ), destroy_surface);
+    int image_count = surface_capabilities.minImageCount;
     VkQueue queue;
     vkGetDeviceQueue(device, queue_family_indices[0], 0, &queue);
     VkCommandPool command_pool;
@@ -286,7 +287,10 @@ int main() {
                         .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
                         .finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR
     };
-    VkAttachmentDescription attachment_description_array[2] = {attachment_description, attachment_description};
+    VkAttachmentDescription *attachment_description_array = malloc(sizeof(VkAttachmentDescription) * image_count);
+    for (int i = 0; i < image_count; i++) {
+        attachment_description_array[i] = attachment_description;
+    }
     VkAttachmentReference attachment_reference = (VkAttachmentReference) {
                         .attachment = 0,
                         .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
@@ -359,12 +363,12 @@ int main() {
                     NULL,
                     &image
     ), destroy_render_pass);
-    int image_count;
-    vkGetSwapchainImagesKHR(device,
-                    swapchain,
-                    &image_count,
-                    NULL
-    );
+    //int image_count;
+    //vkGetSwapchainImagesKHR(device,
+    //                swapchain,
+    //                &image_count,
+    //                NULL
+    //);
     VkImage *swapchain_image_array = malloc(sizeof(VkImage) * image_count);
     vkGetSwapchainImagesKHR(device,
                     swapchain,
