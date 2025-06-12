@@ -198,7 +198,33 @@ int main() {
                     .width = width,
                     .height = height
     };
-    uint queue_family_indices[1] = {queue_family_index};
+    int queue_family_indices[1] = {queue_family_index};
+    VkSurfaceCapabilitiesKHR surface_capabilities;
+    vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, surface, &surface_capabilities);
+    int surface_format_count;
+    vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface, &surface_format_count, NULL);
+    VkSurfaceFormatKHR *surface_format_array = malloc(surface_format_count);
+    vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface, &surface_format_count, surface_format_array);
+    VkSurfaceFormatKHR surface_format = surface_format_array[0];
+    for (int i = 0; i < surface_format_count; i++) {
+        VkSurfaceFormatKHR available_surface_format = surface_format_array[i];
+        if (available_surface_format.format == VK_FORMAT_B8G8R8A8_SRGB && available_surface_format.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
+            surface_format = available_surface_format;
+            break;
+        }
+    }
+    int present_mode_count;
+    vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, &present_mode_count, NULL);
+    VkPresentModeKHR *present_mode_array = malloc(present_mode_count);
+    vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, &present_mode_count, present_mode_array);
+    VkPresentModeKHR present_mode = present_mode_array[0];
+    for (int i = 0; i < present_mode_count; i++) {
+        VkPresentModeKHR available_present_mode = present_mode_array[i];
+        if (available_present_mode == VK_PRESENT_MODE_MAILBOX_KHR) {
+            present_mode = available_present_mode;
+            break;
+        }
+    }
     VkSwapchainKHR swapchain;
     vkCreateSwapchainKHR( device,
                     &(VkSwapchainCreateInfoKHR) {
@@ -206,18 +232,18 @@ int main() {
                         .pNext = NULL,
                         .flags = 0x0,
                         .surface = surface,
-                        .minImageCount = 1,
-                        .imageFormat = VK_FORMAT_B8G8R8A8_SRGB,
-                        .imageColorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR,
+                        .minImageCount = surface_capabilities.minImageCount,
+                        .imageFormat = surface_format.format,
+                        .imageColorSpace = surface_format.colorSpace,
                         .imageExtent = image_extent,
                         .imageArrayLayers = 1,
                         .imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
                         .imageSharingMode = VK_SHARING_MODE_EXCLUSIVE,
-                        .queueFamilyIndexCount = queue_family_index,
-                        .pQueueFamilyIndices = queue_family_indices,
-                        .preTransform = 0x0,
-                        .compositeAlpha = 0x0,
-                        .presentMode = VK_PRESENT_MODE_MAILBOX_KHR,
+                        .queueFamilyIndexCount = 0,
+                        .pQueueFamilyIndices = NULL,
+                        .preTransform = surface_capabilities.currentTransform,
+                        .compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
+                        .presentMode = present_mode,
                         .clipped = VK_TRUE,
                         .oldSwapchain = VK_NULL_HANDLE
                     },
@@ -251,7 +277,7 @@ int main() {
     );
     VkAttachmentDescription attachment_description = (VkAttachmentDescription) {
                         .flags = 0x0,
-                        .format = VK_FORMAT_B8G8R8A8_SRGB,
+                        .format = surface_format.format,
                         .samples = VK_SAMPLE_COUNT_1_BIT,
                         .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
                         .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
@@ -318,7 +344,7 @@ int main() {
                         .pNext = NULL,
                         .flags = 0x0,
                         .imageType = VK_IMAGE_TYPE_2D,
-                        .format = VK_FORMAT_B8G8R8A8_SRGB,
+                        .format = surface_format.format,
                         .extent = extent,
                         .mipLevels = 1,
                         .arrayLayers = 1,
@@ -353,7 +379,7 @@ int main() {
                         .flags = 0x0,
                         .image = swapchain_image_array[0],
                         .viewType = VK_IMAGE_VIEW_TYPE_2D,
-                        .format = VK_FORMAT_B8G8R8A8_SRGB,
+                        .format = surface_format.format,
                         .components = (VkComponentMapping) {
                             .r = VK_COMPONENT_SWIZZLE_R,
                             .g = VK_COMPONENT_SWIZZLE_G,
