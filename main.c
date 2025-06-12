@@ -200,11 +200,11 @@ int main() {
     };
     int queue_family_indices[1] = {queue_family_index};
     VkSurfaceCapabilitiesKHR surface_capabilities;
-    vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, surface, &surface_capabilities);
+    vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physical_device, surface, &surface_capabilities);
     int surface_format_count;
-    vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface, &surface_format_count, NULL);
-    VkSurfaceFormatKHR *surface_format_array = malloc(surface_format_count);
-    vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface, &surface_format_count, surface_format_array);
+    vkGetPhysicalDeviceSurfaceFormatsKHR(physical_device, surface, &surface_format_count, NULL);
+    VkSurfaceFormatKHR *surface_format_array = malloc(sizeof(VkSurfaceFormatKHR) * surface_format_count);
+    vkGetPhysicalDeviceSurfaceFormatsKHR(physical_device, surface, &surface_format_count, surface_format_array);
     VkSurfaceFormatKHR surface_format = surface_format_array[0];
     for (int i = 0; i < surface_format_count; i++) {
         VkSurfaceFormatKHR available_surface_format = surface_format_array[i];
@@ -214,9 +214,9 @@ int main() {
         }
     }
     int present_mode_count;
-    vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, &present_mode_count, NULL);
-    VkPresentModeKHR *present_mode_array = malloc(present_mode_count);
-    vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, &present_mode_count, present_mode_array);
+    vkGetPhysicalDeviceSurfacePresentModesKHR(physical_device, surface, &present_mode_count, NULL);
+    VkPresentModeKHR *present_mode_array = malloc(sizeof(VkPresentModeKHR) * present_mode_count);
+    vkGetPhysicalDeviceSurfacePresentModesKHR(physical_device, surface, &present_mode_count, present_mode_array);
     VkPresentModeKHR present_mode = present_mode_array[0];
     for (int i = 0; i < present_mode_count; i++) {
         VkPresentModeKHR available_present_mode = present_mode_array[i];
@@ -365,7 +365,7 @@ int main() {
                     &image_count,
                     NULL
     );
-    VkImage *swapchain_image_array = malloc(image_count);
+    VkImage *swapchain_image_array = malloc(sizeof(VkImage) * image_count);
     vkGetSwapchainImagesKHR( device,
                     swapchain,
                     &image_count,
@@ -387,7 +387,7 @@ int main() {
                             .a = VK_COMPONENT_SWIZZLE_A,
                         },
                         .subresourceRange = (VkImageSubresourceRange) {
-                            .aspectMask = VK_IMAGE_ASPECT_NONE_KHR,
+                            .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
                             .baseMipLevel = 0,
                             .levelCount = 1,
                             .baseArrayLayer = 0,
@@ -436,7 +436,7 @@ int main() {
     fseek(f, 0, SEEK_END);
     long fsize = ftell(f);
     fseek(f, 0, SEEK_SET);
-    char *vert_shader_code = malloc(fsize);
+    char *vert_shader_code = malloc(sizeof(char) * fsize);
     fread(vert_shader_code, sizeof(char), fsize, f);
     fclose(f);
     printf("%s", vert_shader_code);
