@@ -226,7 +226,7 @@ int main() {
         }
     }
     VkSwapchainKHR swapchain;
-    vkCreateSwapchainKHR( device,
+    handle_error(vkCreateSwapchainKHR(device,
                     &(VkSwapchainCreateInfoKHR) {
                         .sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
                         .pNext = NULL,
@@ -249,11 +249,11 @@ int main() {
                     },
                     NULL,
                     &swapchain
-    );
+    ), destroy_surface);
     VkQueue queue;
     vkGetDeviceQueue(device, queue_family_index, 0, &queue);
     VkCommandPool command_pool;
-    vkCreateCommandPool( device,
+    handle_error(vkCreateCommandPool(device,
                     &(VkCommandPoolCreateInfo) {
                         .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
                         .pNext = NULL,
@@ -262,10 +262,10 @@ int main() {
                     },
                    NULL,
                    &command_pool
-    );
+    ), destory_swapchain);
     VkCommandBuffer command_buffer;
     VkCommandBuffer command_buffer_array[1] = {command_buffer};
-    vkAllocateCommandBuffers( device,
+    handle_error(vkAllocateCommandBuffers(device,
                     &(VkCommandBufferAllocateInfo) {
                         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
                         .pNext = NULL,
@@ -274,7 +274,7 @@ int main() {
                         .commandBufferCount = 1
                     },
                    command_buffer_array
-    );
+    ), destroy_command_pool);
     VkAttachmentDescription attachment_description = (VkAttachmentDescription) {
                         .flags = 0x0,
                         .format = surface_format.format,
@@ -317,7 +317,7 @@ int main() {
     };
     VkSubpassDependency subpass_dependency_array[1] = {subpass_dependency};
     VkRenderPass render_pass;
-    vkCreateRenderPass( device,
+    handle_error(vkCreateRenderPass(device,
                     &(VkRenderPassCreateInfo) {
                         .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
                         .pNext = NULL,
@@ -331,14 +331,14 @@ int main() {
                     },
                     NULL,
                     &render_pass
-    );
+    ), free_command_buffers);
     VkExtent3D extent = (VkExtent3D) {
         .width = width,
         .height = height,
         .depth = 1
     };
     VkImage image;
-    vkCreateImage( device,
+    handle_error(vkCreateImage(device,
                     &(VkImageCreateInfo) {
                         .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
                         .pNext = NULL,
@@ -358,21 +358,21 @@ int main() {
                     },
                     NULL,
                     &image
-    );
+    ), destroy_render_pass);
     int image_count;
-    vkGetSwapchainImagesKHR( device,
+    vkGetSwapchainImagesKHR(device,
                     swapchain,
                     &image_count,
                     NULL
     );
     VkImage *swapchain_image_array = malloc(sizeof(VkImage) * image_count);
-    vkGetSwapchainImagesKHR( device,
+    vkGetSwapchainImagesKHR(device,
                     swapchain,
                     &image_count,
                     swapchain_image_array
     );
     VkImageView image_view;
-    vkCreateImageView( device,
+    handle_error(vkCreateImageView(device,
                     &(VkImageViewCreateInfo) {
                         .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
                         .pNext = NULL,
@@ -396,10 +396,10 @@ int main() {
                     },
                     NULL,
                     &image_view
-    );
+    ), destroy_image);
     VkImageView image_view_array[1] = {image_view};
     VkFramebuffer framebuffer;
-    vkCreateFramebuffer( device,
+    handle_error(vkCreateFramebuffer( device,
                     &(VkFramebufferCreateInfo) {
                         .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
                         .pNext = NULL,
@@ -413,8 +413,8 @@ int main() {
                     },
                     NULL,
                     &framebuffer
-    );
-    vkBeginCommandBuffer( command_buffer,
+    ), destroy_image_view);
+    handle_error(vkBeginCommandBuffer( command_buffer,
                     &(VkCommandBufferBeginInfo) {
                         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
                         .pNext = NULL,
@@ -430,7 +430,7 @@ int main() {
                             .pipelineStatistics = 0x0,
                         }
                     }
-    );
+    ), destroy_frame_buffer);
 
     FILE *f = fopen("shaders/vert.spv", "rb");
     fseek(f, 0, SEEK_END);
@@ -445,8 +445,22 @@ int main() {
         glfwPollEvents();
     }
     printf("Exiting normally!!\n\n");
+destroy_frame_buffer:
+    vkDestroyFramebuffer(device, framebuffer, NULL);
+destroy_image_view:
+    vkDestroyImageView(device, image_view, NULL);
+destroy_image:
+    vkDestroyImage(device, image, NULL);
+destroy_render_pass:
+    vkDestroyRenderPass(device, render_pass, NULL);
 free_command_buffers:
     vkFreeCommandBuffers(device, command_pool, 1, command_buffer_array);
+destroy_command_pool:
+    vkDestroyCommandPool(device, command_pool, NULL);
+destory_swapchain:
+    vkDestroySwapchainKHR(device, swapchain, NULL);
+destroy_surface:
+    vkDestroySurfaceKHR(vulkan_instance, surface, NULL);
 destroy_window:
     glfwDestroyWindow(window);
 destory_device:
