@@ -326,7 +326,7 @@ int main() {
                         .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
                         .pNext = NULL,
                         .flags = 0x0,
-                        .attachmentCount = 2,
+                        .attachmentCount = image_count,
                         .pAttachments = attachment_description_array,
                         .subpassCount = 1,
                         .pSubpasses = subpass_description_array,
@@ -406,7 +406,6 @@ int main() {
         ), destroy_image_view);
         image_view_array[created_image_views] = image_view;
     }
-    
     VkFramebuffer framebuffer;
     handle_error(vkCreateFramebuffer( device,
                     &(VkFramebufferCreateInfo) {
@@ -423,7 +422,7 @@ int main() {
                     NULL,
                     &framebuffer
     ), destroy_image_view);
-    handle_error(vkBeginCommandBuffer( command_buffer,
+    handle_error(vkBeginCommandBuffer( command_buffer_array[0],
                     &(VkCommandBufferBeginInfo) {
                         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
                         .pNext = NULL,
@@ -442,6 +441,10 @@ int main() {
     ), destroy_frame_buffer);
 
     FILE *f = fopen("shaders/vert.spv", "rb");
+    if(f == NULL) {
+        perror("failed to open file");
+        goto destroy_frame_buffer;
+    }
     fseek(f, 0, SEEK_END);
     long fsize = ftell(f);
     fseek(f, 0, SEEK_SET);
