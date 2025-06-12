@@ -80,7 +80,7 @@ int main() {
         extensions[i] = glfw_extensions[i];
     }
     //extensions[instance_extension_count] = "VK_KHR_swapchain";
-    printf("Loading Extensions\n");
+    printf("%s", "Loading Extensions\n");
     for(int i = 0; i < instance_extension_count; i++) {
         printf("%s\n", extensions[i]);
     }
@@ -251,14 +251,14 @@ int main() {
                     &swapchain
     ), destroy_surface);
     VkQueue queue;
-    vkGetDeviceQueue(device, queue_family_index, 0, &queue);
+    vkGetDeviceQueue(device, queue_family_indices[0], 0, &queue);
     VkCommandPool command_pool;
     handle_error(vkCreateCommandPool(device,
                     &(VkCommandPoolCreateInfo) {
                         .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
                         .pNext = NULL,
-                        .flags = 0x0,
-                        .queueFamilyIndex = queue_family_index
+                        .flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
+                        .queueFamilyIndex = queue_family_indices[0]
                     },
                    NULL,
                    &command_pool
@@ -286,7 +286,7 @@ int main() {
                         .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
                         .finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR
     };
-    VkAttachmentDescription attachment_description_array[1] = {attachment_description};
+    VkAttachmentDescription attachment_description_array[2] = {attachment_description, attachment_description};
     VkAttachmentReference attachment_reference = (VkAttachmentReference) {
                         .attachment = 0,
                         .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
@@ -322,7 +322,7 @@ int main() {
                         .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
                         .pNext = NULL,
                         .flags = 0x0,
-                        .attachmentCount = 1,
+                        .attachmentCount = 2,
                         .pAttachments = attachment_description_array,
                         .subpassCount = 1,
                         .pSubpasses = subpass_description_array,
@@ -371,13 +371,16 @@ int main() {
                     &image_count,
                     swapchain_image_array
     );
-    VkImageView image_view;
-    handle_error(vkCreateImageView(device,
+    VkImageView *image_view_array = malloc(sizeof(VkImageView) * image_count);
+    int created_image_views = 0;
+    for (int created_image_views = 0; created_image_views < image_count; created_image_views ++) {
+        VkImageView image_view;
+        handle_error(vkCreateImageView( device,
                     &(VkImageViewCreateInfo) {
                         .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
                         .pNext = NULL,
                         .flags = 0x0,
-                        .image = swapchain_image_array[0],
+                        .image = swapchain_image_array[created_image_views],
                         .viewType = VK_IMAGE_VIEW_TYPE_2D,
                         .format = surface_format.format,
                         .components = (VkComponentMapping) {
@@ -396,8 +399,10 @@ int main() {
                     },
                     NULL,
                     &image_view
-    ), destroy_image);
-    VkImageView image_view_array[1] = {image_view};
+        ), destroy_image_view);
+        image_view_array[created_image_views] = image_view;
+    }
+    
     VkFramebuffer framebuffer;
     handle_error(vkCreateFramebuffer( device,
                     &(VkFramebufferCreateInfo) {
@@ -405,10 +410,10 @@ int main() {
                         .pNext = NULL,
                         .flags = 0x0,
                         .renderPass = render_pass,
-                        .attachmentCount = 1,
+                        .attachmentCount = image_count,
                         .pAttachments = image_view_array,
-                        .width = 1,
-                        .height = 1, 
+                        .width = width,
+                        .height = height, 
                         .layers = 1
                     },
                     NULL,
@@ -448,7 +453,10 @@ int main() {
 destroy_frame_buffer:
     vkDestroyFramebuffer(device, framebuffer, NULL);
 destroy_image_view:
-    vkDestroyImageView(device, image_view, NULL);
+    for (int i = 0; i < created_image_views; i++) {
+        VkImageView image_view = image_view_array[i];
+        vkDestroyImageView(device, image_view, NULL);
+    }
 destroy_image:
     vkDestroyImage(device, image, NULL);
 destroy_render_pass:
