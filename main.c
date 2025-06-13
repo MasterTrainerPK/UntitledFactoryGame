@@ -44,7 +44,7 @@ const char* handle_error_type(int vk_result) {
     default: return "UNKNOWN UNKNOWN :/";
     }
 }
-#define handle_error(coolio, ahh) {vk_result = coolio; do{if(vk_result != VK_SUCCESS) {\
+#define handle_error(coolio, ahh) {vk_result = coolio; do{if(vk_result < VK_SUCCESS) {\
         fprintf(stderr,\
                  "ERR at %s, line %d:  %s",\
          __FILE__, __LINE__, handle_error_type(vk_result)); error_code = EXIT_FAILURE; goto ahh;}} while(0);}
@@ -427,7 +427,7 @@ int main() {
                     },
                     NULL,
                     &framebuffer
-    ), destroy_frame_buffer);
+    ), destroy_image_views);
     printf("%s", "Frame buffer created\n");
     FILE *f_vertex = fopen("shaders/vert.spv", "rb");
     if(f_vertex == NULL) {
@@ -451,7 +451,7 @@ int main() {
                     },
                     NULL,
                     &vertex_shader_module
-    ), destroy_vertex_shader_module);
+    ), destory_frame_buffer);
     FILE *f_fragment = fopen("shaders/frag.spv", "rb");
     if(f_fragment == NULL) {
         perror("failed to open file");
@@ -474,7 +474,7 @@ int main() {
                     },
                     NULL,
                     &fragment_shader_module
-    ), destroy_fragment_shader_module);
+    ), destroy_vertex_shader_module);
     VkPipelineShaderStageCreateInfo vertex_shader_stage = (VkPipelineShaderStageCreateInfo) {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
         .pNext = NULL,
@@ -531,7 +531,7 @@ int main() {
                     },
                     NULL,
                     &pipeline_layout
-    ), destroy_pipeline_layout);
+    ), destroy_fragment_shader_module);
     VkPipeline pipeline; // The big one
     handle_error(vkCreateGraphicsPipelines( device,
                     VK_NULL_HANDLE,
@@ -620,7 +620,7 @@ int main() {
                     },
                     NULL,
                     &pipeline
-    ), destroy_pipeline);
+    ), destroy_pipeline_layout);
     printf("%s", "Pipeline created\n");
     handle_error(vkBeginCommandBuffer( command_buffer_array[0],
                     &(VkCommandBufferBeginInfo) {
@@ -661,7 +661,7 @@ int main() {
     );
     printf("%s", "Command buffer and render pass have begun\n");
     VkSemaphore image_available_semaphore;
-    handle_error(vkCreateSemaphore( device,
+    handle_error(vkCreateSemaphore(device,
                     &(VkSemaphoreCreateInfo) {
                         .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
                         .pNext = NULL,
@@ -669,9 +669,9 @@ int main() {
                     },
                     NULL,
                     &image_available_semaphore
-    ), destroy_image_semaphore);
+    ), destroy_pipeline);
     VkSemaphore render_finished_semaphore;
-    handle_error(vkCreateSemaphore( device,
+    handle_error(vkCreateSemaphore(device,
                     &(VkSemaphoreCreateInfo) {
                         .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
                         .pNext = NULL,
@@ -679,7 +679,7 @@ int main() {
                     },
                     NULL,
                     &render_finished_semaphore
-    ), destroy_render_semaphore);
+    ), destroy_image_semaphore);
     VkFence in_flight_fence;
     handle_error(vkCreateFence( device,
                     &(VkFenceCreateInfo) {
@@ -689,15 +689,15 @@ int main() {
                     },
                     NULL,
                     &in_flight_fence
-    ), destroy_flight_fence);
+    ), destroy_render_semaphore);
     int image_index;
-    vkAcquireNextImageKHR( device,
+    handle_error(vkAcquireNextImageKHR( device,
                     swapchain,
                     UINT64_MAX,
                     image_available_semaphore,
                     VK_NULL_HANDLE,
                     &image_index
-    );
+    ), destroy_flight_fence);
     printf("%s", "Ready to submit commands\n");
     vkCmdBindPipeline(command_buffer_array[0], VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
     vkCmdDraw(command_buffer_array[0], 3, 1, 0, 0);
