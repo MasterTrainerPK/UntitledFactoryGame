@@ -1,10 +1,10 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <time.h>
 #include <vulkan/vulkan.h>
 #include <GLFW/glfw3.h>
 #include <vulkan/vulkan_core.h>
-
 const char* handle_error_type(int vk_result) {
     switch(vk_result) {
     case VK_ERROR_OUT_OF_HOST_MEMORY: return "A host memory allocation has failed.";
@@ -58,20 +58,18 @@ int main() {
     VkResult vk_result;
     glfwInit();
     glfwSetErrorCallback(&error_handle_glfw);
-    if (!glfwVulkanSupported()) {
+    if(!glfwVulkanSupported()) {
         perror("ERR: GLFW+Vulkan not supported");
         error_code = EXIT_FAILURE;
         goto exit_GLFW;
     }
-
     uint32_t version = 0;
     vkEnumerateInstanceVersion(&version);
-    if (version < VK_VERSION_1_3) {
+    if(version < VK_VERSION_1_3) {
         perror("ERR: Vulkan 1.3 or above required");
         error_code = EXIT_FAILURE;
         goto exit_GLFW;
     }
-
     uint32_t instance_extension_count;
     const char** extensions;
     {
@@ -120,7 +118,7 @@ int main() {
         handle_error(vkEnumeratePhysicalDevices(vulkan_instance, &num_physical_devices, physical_devices), destroy_instance);
         int best_i = 0;
         int best_prio = 5;
-        for( int i = 0; i < num_physical_devices; i++) {
+        for(int i = 0; i < num_physical_devices; i++) {
             VkPhysicalDeviceProperties properties;
             vkGetPhysicalDeviceProperties(physical_devices[i], &properties);
             if(type_to_prio[properties.deviceType] < best_prio) {
@@ -140,9 +138,9 @@ int main() {
     VkQueueFamilyProperties* queue_family_properties = malloc(sizeof(VkQueueFamilyProperties)*queue_family_num);
     vkGetPhysicalDeviceQueueFamilyProperties(physical_device, &queue_family_num, queue_family_properties);
     int queue_family_index;
-    for (queue_family_index = 0;
-        !(queue_family_properties[queue_family_index].queueFlags | VK_QUEUE_GRAPHICS_BIT); queue_family_index++ ) {
-        if (queue_family_index == queue_family_num) {
+    for(queue_family_index = 0;
+        !(queue_family_properties[queue_family_index].queueFlags | VK_QUEUE_GRAPHICS_BIT); queue_family_index++) {
+        if(queue_family_index == queue_family_num) {
             perror("ERR: Can't find graphics queue!!");
             error_code = EXIT_FAILURE;
             goto destroy_instance;
@@ -180,7 +178,7 @@ int main() {
 
     GLFWmonitor* monitor = glfwGetPrimaryMonitor();
     //FIXME: give this a fallback
-    if (!monitor) {
+    if(!monitor) {
         perror("ERR: The program cannot find your primary monitor");
         error_code = -1;
         goto destory_device;
@@ -188,7 +186,7 @@ int main() {
 
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
     GLFWwindow* window = glfwCreateWindow(1000, 1000, "Hello Window", NULL, NULL);
-    if (window == NULL) {
+    if(window == NULL) {
         perror("ERR: no window...");
         error_code = -1;
         goto destroy_window;
@@ -219,9 +217,9 @@ int main() {
     vkGetPhysicalDeviceSurfaceFormatsKHR(physical_device, surface, &surface_format_count, surface_format_array);
     VkSurfaceFormatKHR surface_format = surface_format_array[0];
 
-    for (int i = 0; i < surface_format_count; i++) {
+    for(int i = 0; i < surface_format_count; i++) {
         VkSurfaceFormatKHR available_surface_format = surface_format_array[i];
-        if (available_surface_format.format == VK_FORMAT_B8G8R8A8_SRGB && available_surface_format.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
+        if(available_surface_format.format == VK_FORMAT_B8G8R8A8_SRGB && available_surface_format.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
             surface_format = available_surface_format;
             break;
         }
@@ -233,9 +231,9 @@ int main() {
     vkGetPhysicalDeviceSurfacePresentModesKHR(physical_device, surface, &present_mode_count, present_mode_array);
     VkPresentModeKHR present_mode = present_mode_array[0];
 
-    for (int i = 0; i < present_mode_count; i++) {
+    for(int i = 0; i < present_mode_count; i++) {
         VkPresentModeKHR available_present_mode = present_mode_array[i];
-        if (available_present_mode == VK_PRESENT_MODE_MAILBOX_KHR) {
+        if(available_present_mode == VK_PRESENT_MODE_MAILBOX_KHR) {
             present_mode = available_present_mode;
             break;
         }
@@ -314,7 +312,7 @@ int main() {
         .finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR
     };
     VkAttachmentDescription *attachment_description_array = malloc(sizeof(VkAttachmentDescription) * image_count);
-    for (int i = 0; i < image_count; i++) {
+    for(int i = 0; i < image_count; i++) {
         attachment_description_array[i] = attachment_description;
     }
 
@@ -374,45 +372,12 @@ int main() {
         .height = height,
         .depth = 1
     };
-
-    /* VkImage image;
-    handle_error(vkCreateImage(
-        device,
-        &(VkImageCreateInfo) {
-            .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
-            .pNext = NULL,
-            .flags = 0x0,
-            .imageType = VK_IMAGE_TYPE_2D,
-            .format = surface_format.format,
-            .extent = extent,
-            .mipLevels = 1,
-            .arrayLayers = 1,
-            .samples = VK_SAMPLE_COUNT_1_BIT,
-            .tiling = VK_IMAGE_TILING_OPTIMAL,
-            .usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
-            .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
-            .queueFamilyIndexCount = 1,
-            .pQueueFamilyIndices = queue_family_indices,
-            .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED
-        },
-        NULL,
-        &image
-    ), destroy_render_pass);
-
-    int image_count;
-    vkGetSwapchainImagesKHR(
-        device,
-        swapchain,
-        &image_count,
-        NULL
-    ); */
-
     VkImage *swapchain_image_array = malloc(sizeof(VkImage) * image_count);
     vkGetSwapchainImagesKHR(device, swapchain, &image_count, swapchain_image_array);
 
     VkImageView *image_view_array = malloc(sizeof(VkImageView) * image_count);
     int created_image_views;
-    for (created_image_views = 0; created_image_views < image_count; created_image_views++) {
+    for(created_image_views = 0; created_image_views < image_count; created_image_views++) {
         VkImageView image_view;
         handle_error(vkCreateImageView(
             device,
@@ -487,7 +452,6 @@ int main() {
         NULL,
         &vertex_shader_module
     ), destroy_frame_buffer);
-
     FILE *f_fragment = fopen("shaders/frag.spv", "rb");
     if(f_fragment == NULL) {
         perror("failed to open file");
@@ -501,7 +465,7 @@ int main() {
     fclose(f_fragment);
 
     VkShaderModule fragment_shader_module;
-    handle_error(vkCreateShaderModule( device,
+    handle_error(vkCreateShaderModule(device,
         &(VkShaderModuleCreateInfo) {
             .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
             .pNext = NULL,
@@ -690,7 +654,7 @@ int main() {
 
     VkClearValue clear_color = {{0.0f, 0.0f, 0.0f, 1.0f}};
     VkClearValue *clear_color_array = malloc(sizeof(VkClearValue) * image_count);
-    for (int i = 1; i < image_count; i++) {
+    for(int i = 0; i < image_count; i++) {
         clear_color_array[i] = clear_color;
     }
 
@@ -775,7 +739,6 @@ int main() {
         in_flight_fence
     );
     printf("%s", "Commands submitted\n");
-
     vkWaitForFences(device, 1, &in_flight_fence, VK_TRUE, UINT64_MAX);
 
     vkQueuePresentKHR(
@@ -791,8 +754,35 @@ int main() {
             .pResults = NULL
         }
     );
-
-    while (!glfwWindowShouldClose(window) && glfwGetMouseButton(window, 1) != GLFW_PRESS) {
+    struct timespec curr_time;
+    const int dt = 10000000; // 1/100 of a sec
+    long int accumulator = 0;
+    long int t = 0;
+    if(timespec_get(&curr_time, TIME_UTC) == 0) {
+            perror("failed to get time");
+            goto destroy_flight_fence;
+    }
+    while(!glfwWindowShouldClose(window) && glfwGetMouseButton(window, 1) != GLFW_PRESS) {
+        struct timespec new_time;
+        if(timespec_get(&new_time, TIME_UTC) == 0) {
+            perror("failed to get time during loop");
+            goto destroy_flight_fence;
+        }
+        int frame_time = new_time.tv_sec - curr_time.tv_sec;
+        frame_time = new_time.tv_nsec - curr_time.tv_nsec + frame_time * 1000000000 ; // sec to ns
+        //ass(frame_time >= 0);
+        if(frame_time > 250000000) { // 1/4 a sec
+            frame_time = 250000000;
+        }
+        curr_time = new_time;
+        accumulator += frame_time;
+        while(accumulator > dt) {
+            // logic tick
+            t += dt;
+            accumulator -= dt;
+        }
+        const double alpha = (double)accumulator / dt;
+        //lerp state and render state;
         glfwPollEvents();
     }
     printf("Exiting normally!!\n\n");
@@ -813,12 +803,10 @@ destroy_vertex_shader_module:
 destroy_frame_buffer:
     vkDestroyFramebuffer(device, framebuffer, NULL);
 destroy_image_views:
-    for (int i = 0; i < created_image_views; i++) {
+    for(int i = 0; i < created_image_views; i++) {
         VkImageView image_view = image_view_array[i];
         vkDestroyImageView(device, image_view, NULL);
     }
-//destroy_image:
-//    vkDestroyImage(device, image, NULL);
 destroy_render_pass:
     vkDestroyRenderPass(device, render_pass, NULL);
 free_command_buffers:
