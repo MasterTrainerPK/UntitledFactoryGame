@@ -390,11 +390,15 @@ int main() {
     float vertex_1[4] = {0.0f, -0.5f, 0.0f, 1.0f};
     float vertex_2[4] = {0.5f, 0.5f, 0.0f, 1.0f};
     float vertex_3[4] = {-0.5f, 0.5f, 0.0f, 1.0f};
-    float *model_data[3] = {vertex_1, vertex_2, vertex_3};
+    //float *model_data[3] = {vertex_1, vertex_2, vertex_3};
+    float vertices[12] = {
+        0.0f, -0.5f, 0.0f, 1.0f,
+        0.5f, 0.5f, 0.0f, 1.0f,
+        0.0f, 0.5f, 0.0f, 1.0f };
 
     VkVertexInputBindingDescription vertex_binding_description = (VkVertexInputBindingDescription) {
         .binding = 0,
-        .stride = sizeof(model_data[0]),
+        .stride = sizeof(float)*4,
         .inputRate = VK_VERTEX_INPUT_RATE_VERTEX
     };
 
@@ -412,7 +416,7 @@ int main() {
             .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
             .pNext = NULL,
             .flags = 0x0,
-            .size = sizeof(model_data[0]) * vertex_count,
+            .size = sizeof(float)* 4 * vertex_count,
             .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
             .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
             .queueFamilyIndexCount = 1,
@@ -447,13 +451,13 @@ int main() {
         },
         NULL,
         &vertex_memory
-    ), destroy_frame_buffer);
+    ), destroy_vertex_buffer);
 
     vkBindBufferMemory(device, vertex_buffer, vertex_memory, 0);
 
     void *data;
-    vkMapMemory(device, vertex_memory, 0, sizeof(model_data[0]) * vertex_count, 0x0, &data);
-    memcpy(data, model_data, memory_requirements.size);
+    vkMapMemory(device, vertex_memory, 0, sizeof(float) * 4 * vertex_count, 0x0, &data);
+    memcpy(data, vertices, memory_requirements.size);
 
     FILE *f_vertex = fopen("shaders/vert.spv", "rb");
     if(f_vertex == NULL) {
@@ -479,7 +483,7 @@ int main() {
         },
         NULL,
         &vertex_shader_module
-    ), destroy_frame_buffer);
+    ), free_vertex_memory);
     FILE *f_fragment = fopen("shaders/frag.spv", "rb");
     if(f_fragment == NULL) {
         perror("failed to open file");
@@ -830,6 +834,10 @@ destroy_fragment_shader_module:
     vkDestroyShaderModule(device, fragment_shader_module, NULL);
 destroy_vertex_shader_module:
     vkDestroyShaderModule(device, vertex_shader_module, NULL);
+free_vertex_memory:
+    vkFreeMemory(device, vertex_memory, NULL);
+destroy_vertex_buffer:
+    vkDestroyBuffer(device, vertex_buffer, NULL);
 destroy_frame_buffer:
     vkDestroyFramebuffer(device, framebuffer, NULL);
 destroy_image_views:
