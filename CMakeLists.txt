@@ -1,5 +1,6 @@
 cmake_minimum_required(VERSION 3.5)
 project(FactoryGame)
+set_property(GLOBAL PROPERTY C_STANDARD 21)
 
 find_package(Vulkan REQUIRED)
 find_package(glfw3 REQUIRED)
