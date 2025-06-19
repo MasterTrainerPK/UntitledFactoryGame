@@ -1,7 +1,7 @@
-#include <bits/time.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <time.h>
 #include <vulkan/vulkan.h>
 #include <GLFW/glfw3.h>
@@ -384,6 +384,77 @@ int main() {
     ), destroy_image_views);
     printf("%s", "Frame buffer created\n");
 
+    FILE *f_model = fopen("cube.obj", "r");
+
+    int vertex_count = 3;
+    float vertex_1[4] = {0.0f, -0.5f, 0.0f, 1.0f};
+    float vertex_2[4] = {0.5f, 0.5f, 0.0f, 1.0f};
+    float vertex_3[4] = {-0.5f, 0.5f, 0.0f, 1.0f};
+    float *model_data[3] = {vertex_1, vertex_2, vertex_3};
+
+    VkVertexInputBindingDescription vertex_binding_description = (VkVertexInputBindingDescription) {
+        .binding = 0,
+        .stride = sizeof(model_data[0]),
+        .inputRate = VK_VERTEX_INPUT_RATE_VERTEX
+    };
+
+    VkVertexInputAttributeDescription vertex_attribute_description = (VkVertexInputAttributeDescription) {
+        .location = 0,
+        .format = VK_FORMAT_R32G32B32A32_SFLOAT,
+        .binding = 0,
+        .offset = 0
+    };
+
+    VkBuffer vertex_buffer;
+    handle_error(vkCreateBuffer(
+        device,
+        &(VkBufferCreateInfo) {
+            .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+            .pNext = NULL,
+            .flags = 0x0,
+            .size = sizeof(model_data[0]) * vertex_count,
+            .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+            .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+            .queueFamilyIndexCount = 1,
+            .pQueueFamilyIndices = queue_family_indices
+        },
+        NULL,
+        &vertex_buffer
+    ), destroy_frame_buffer);
+
+    VkMemoryRequirements memory_requirements;
+    vkGetBufferMemoryRequirements(device, vertex_buffer, &memory_requirements);
+
+    VkPhysicalDeviceMemoryProperties memory_properties;
+    vkGetPhysicalDeviceMemoryProperties(physical_device, &memory_properties);
+
+    int memory_index;
+    for (int i = 0; memory_properties.memoryTypeCount; i++) {
+        if ((memory_requirements.memoryTypeBits & (1 << i)) && (memory_properties.memoryTypes[i].propertyFlags & (VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)) == (VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)) {
+            memory_index = i;
+            break;
+        }
+    }
+
+    VkDeviceMemory vertex_memory;
+    handle_error(vkAllocateMemory(
+        device,
+        &(VkMemoryAllocateInfo) {
+            .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+            .pNext = NULL,
+            .allocationSize = memory_requirements.size,
+            .memoryTypeIndex = memory_index
+        },
+        NULL,
+        &vertex_memory
+    ), destroy_frame_buffer);
+
+    vkBindBufferMemory(device, vertex_buffer, vertex_memory, 0);
+
+    void *data;
+    vkMapMemory(device, vertex_memory, 0, sizeof(model_data[0]) * vertex_count, 0x0, &data);
+    memcpy(data, model_data, memory_requirements.size);
+
     FILE *f_vertex = fopen("shaders/vert.spv", "rb");
     if(f_vertex == NULL) {
         perror("failed to open file");
@@ -513,10 +584,10 @@ int main() {
                 .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
                 .pNext = NULL,
                 .flags = 0x0,
-                .vertexBindingDescriptionCount = 0,
-                .pVertexBindingDescriptions = NULL,
-                .vertexAttributeDescriptionCount = 0,
-                .pVertexAttributeDescriptions = NULL
+                .vertexBindingDescriptionCount = 1,
+                .pVertexBindingDescriptions = &vertex_binding_description,
+                .vertexAttributeDescriptionCount = 1,
+                .pVertexAttributeDescriptions = &vertex_attribute_description
             },
             .pInputAssemblyState = &(VkPipelineInputAssemblyStateCreateInfo) {
                 .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
@@ -674,7 +745,9 @@ int main() {
     printf("%s", "Ready to submit commands\n");
 
     vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
-    vkCmdDraw(command_buffer, 3, 1, 0, 0);
+    VkDeviceSize offsets[1] = {0};
+    vkCmdBindVertexBuffers(command_buffer, 0, 1, &vertex_buffer, offsets);
+    vkCmdDraw(command_buffer, vertex_count, 1, 0, 0);
     vkCmdEndRenderPass(command_buffer);
     vkEndCommandBuffer(command_buffer);
 
