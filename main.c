@@ -13,6 +13,16 @@ void error_handle_glfw(int e, const char* msg) {
     fprintf(stderr, "GLFW ERR: %d, MSG: %s", e, msg);
 }
 
+float *transform_vector(float *matrix, float *vector, int dimension) {
+    float *new_vector = malloc(sizeof(float) * dimension);
+    for (int a = 0; a < dimension; a++) {
+        for (int b = 0; b < dimension; b++) {
+            new_vector[a] += matrix[a * dimension + b] * vector[b];
+        }
+    }
+    return new_vector;
+}
+
 int main() {
     int error_code = EXIT_SUCCESS;
     VkResult vk_result;
@@ -392,11 +402,13 @@ int main() {
 
     FILE *f_model = fopen("cube.obj", "r");
 
-    int vertex_count = 3;
-    int vertex_size = 4;
-    float vertex_1[4] = {0.0f, -0.5f, 0.0f, 1.0f};
-    float vertex_2[4] = {0.5f, 0.5f, 0.0f, 1.0f};
-    float vertex_3[4] = {-0.5f, 0.5f, 0.0f, 1.0f};
+    int vertex_count = 36;
+    int vertex_dim = 4;
+    int vertex_color = 3;
+    int vertex_size = vertex_dim + vertex_color;
+    //float vertex_1[4] = {0.0f, -0.5f, 0.0f, 1.0f};
+    //float vertex_2[4] = {0.5f, 0.5f, 0.0f, 1.0f};
+    //float vertex_3[4] = {-0.5f, 0.5f, 0.0f, 1.0f};
     //float *model_data[3] = {vertex_1, vertex_2, vertex_3};
     //float vertices[12] = {
     //    0.0f, -0.5f, 0.0f, 1.0f,
@@ -409,12 +421,21 @@ int main() {
         .inputRate = VK_VERTEX_INPUT_RATE_VERTEX
     };
 
-    VkVertexInputAttributeDescription vertex_attribute_description = (VkVertexInputAttributeDescription) {
+    VkVertexInputAttributeDescription vertex_attribute_description_position = (VkVertexInputAttributeDescription) {
         .location = 0,
         .format = VK_FORMAT_R32G32B32A32_SFLOAT,
         .binding = 0,
         .offset = 0
     };
+
+    VkVertexInputAttributeDescription vertex_attribute_description_color = (VkVertexInputAttributeDescription) {
+        .location = 1,
+        .format = VK_FORMAT_R32G32B32_SFLOAT,
+        .binding = 0,
+        .offset = sizeof(float) * vertex_dim
+    };
+
+    VkVertexInputAttributeDescription vertex_attribute_description_array[2] = {vertex_attribute_description_position, vertex_attribute_description_color};
 
     VkBuffer vertex_buffer;
     handle_error(vkCreateBuffer(
@@ -596,8 +617,8 @@ int main() {
                 .flags = 0x0,
                 .vertexBindingDescriptionCount = 1,
                 .pVertexBindingDescriptions = &vertex_binding_description,
-                .vertexAttributeDescriptionCount = 1,
-                .pVertexAttributeDescriptions = &vertex_attribute_description
+                .vertexAttributeDescriptionCount = 2,
+                .pVertexAttributeDescriptions = vertex_attribute_description_array
             },
             .pInputAssemblyState = &(VkPipelineInputAssemblyStateCreateInfo) {
                 .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
@@ -761,11 +782,107 @@ int main() {
         vkResetFences(device, 1, &in_flight_fence_array[current_frame]);
         vkResetCommandBuffer(command_buffer, 0x0);
 
-        float vertices[12] = {
-            0.5f * (float)sin((double)curr_time.tv_nsec / 1000000000.0 * 2.0 * 3.1415), -0.5f * (float)cos((double)curr_time.tv_nsec / 1000000000.0 * 2.0 * 3.1415), 0.0f, 1.0f,
-            0.5f * (float)sin((double)curr_time.tv_nsec / 1000000000.0 * 2.0 * 3.1415 + 3.1415 * 0.6666), -0.5f * (float)cos((double)curr_time.tv_nsec / 1000000000.0 * 2.0 * 3.1415 + 3.1415 * 0.6666), 0.0f, 1.0f,
-            0.5f * (float)sin((double)curr_time.tv_nsec / 1000000000.0 * 2.0 * 3.1415 + 3.1415 * 1.3333), -0.5f * (float)cos((double)curr_time.tv_nsec / 1000000000.0 * 2.0 * 3.1415 + 3.1415 * 1.3333), 0.0f, 1.0f };
-        memcpy(data, vertices, memory_requirements.size);
+        float camera_position[4] = {0.0f, 0.0f, 0.5f, 0.0f};
+
+        double theta = (double)curr_time.tv_nsec / 1000000000.0 * 2 * 3.1415;
+
+        float rotation_matrix_x[16] = {
+            1.0f, 0.0f, 0.0f, 0.0f,
+            0.0f, (float)cos(theta), (float)cos(theta + 3.1415 * 0.5), 0.0f,
+            0.0f, (float)sin(theta), (float)sin(theta + 3.1415 * 0.5), 0.0f,
+            0.0f, 0.0f, 0.0f, 1.0f
+        };
+
+        float rotation_matrix_y[16] = {
+            (float)cos(theta), 0.0f, (float)cos(theta + 3.1415 * 0.5), 0.0f,
+            0.0f, 1.0f, 0.0f, 0.0f,
+            (float)sin(theta), 0.0f, (float)sin(theta + 3.1415 * 0.5), 0.0f,
+            0.0f, 0.0f, 0.0f, 1.0f
+        };
+
+        float rotation_matrix_z[16] = {
+            (float)cos(theta), (float)cos(theta + 3.1415 * 0.5), 0.0f, 0.0f,
+            (float)sin(theta), (float)sin(theta + 3.1415 * 0.5), 0.0f, 0.0f,
+            0.0f, 0.0f, 1.0f, 0.0f,
+            0.0f, 0.0f, 0.0f, 1.0f
+        };
+
+        float vertices[252] = {
+            //x, y, z, w, r, g, b
+
+            // Front face
+            0.5f,  0.5f,  -0.5f, 1.0f,  1.0f,  1.0f,  0.0f,
+            -0.5f, 0.5f,  -0.5f, 1.0f,  0.0f,  1.0f,  0.0f,
+            0.5f,  -0.5f, -0.5f, 1.0f,  1.0f,  0.0f,  0.0f,
+            -0.5f, -0.5f, -0.5f, 1.0f,  0.0f,  0.0f,  0.0f,
+            0.5f,  -0.5f, -0.5f, 1.0f,  1.0f,  0.0f,  0.0f,
+            -0.5f,  0.5f, -0.5f, 1.0f,  0.0f,  1.0f,  0.0f,
+
+            // Back face
+            0.5f,  0.5f,  0.5f,  1.0f,  1.0f,  1.0f,  1.0f,
+            0.5f,  -0.5f, 0.5f,  1.0f,  1.0f,  0.0f,  1.0f,
+            -0.5f, 0.5f,  0.5f,  1.0f,  0.0f,  1.0f,  1.0f,
+            -0.5f, -0.5f, 0.5f,  1.0f,  0.0f,  0.0f,  1.0f,
+            -0.5f, 0.5f,  0.5f,  1.0f,  0.0f,  1.0f,  1.0f,
+            0.5f,  -0.5f, 0.5f,  1.0f,  1.0f,  0.0f,  1.0f,
+
+            // Right face
+            0.5f,  0.5f,  0.5f,  1.0f,  1.0f,  1.0f,  1.0f,
+            0.5f,  0.5f,  -0.5f, 1.0f,  1.0f,  1.0f,  0.0f,
+            0.5f,  -0.5f, 0.5f,  1.0f,  1.0f,  0.0f,  1.0f,
+            0.5f,  -0.5f, -0.5f, 1.0f,  1.0f,  0.0f,  0.0f,
+            0.5f,  -0.5f, 0.5f,  1.0f,  1.0f,  0.0f,  1.0f,
+            0.5f,  0.5f,  -0.5f, 1.0f,  1.0f,  1.0f,  0.0f,
+
+            // Left face
+            -0.5f, 0.5f,  0.5f,  1.0f,  0.0f,  1.0f,  1.0f,
+            -0.5f, -0.5f, 0.5f,  1.0f,  0.0f,  0.0f,  1.0f,
+            -0.5f, 0.5f,  -0.5f, 1.0f,  0.0f,  1.0f,  0.0f,
+            -0.5f, -0.5f, -0.5f, 1.0f,  0.0f,  0.0f,  0.0f,
+            -0.5f, 0.5f,  -0.5f, 1.0f,  0.0f,  1.0f,  0.0f,
+            -0.5f, -0.5f, 0.5f,  1.0f,  0.0f,  0.0f,  1.0f,
+
+            // Top face
+            0.5f,  -0.5f, -0.5f, 1.0f,  1.0f,  0.0f,  0.0f,
+            -0.5f, -0.5f, -0.5f, 1.0f,  0.0f,  0.0f,  0.0f,
+            0.5f,  -0.5f, 0.5f,  1.0f,  1.0f,  0.0f,  1.0f,
+            -0.5f, -0.5f, 0.5f,  1.0f,  0.0f,  0.0f,  1.0f,
+            0.5f,  -0.5f, 0.5f,  1.0f,  1.0f,  0.0f,  1.0f,
+            -0.5f, -0.5f, -0.5f, 1.0f,  0.0f,  0.0f,  0.0f,
+
+            // Bottom face
+            0.5f,  0.5f,  -0.5f, 1.0f,  1.0f,  1.0f,  0.0f,
+            0.5f,  0.5f,   0.5f, 1.0f,  1.0f,  1.0f,  1.0f,
+            -0.5f, 0.5f,  -0.5f, 1.0f,  0.0f,  1.0f,  0.0f,
+            -0.5f, 0.5f,  0.5f,  1.0f,  0.0f,  1.0f,  1.0f,
+            -0.5f, 0.5f,  -0.5f, 1.0f,  0.0f,  1.0f,  0.0f,
+            0.5f,  0.5f,  0.5f,  1.0f,  1.0f,  1.0f,  1.0f,
+        };
+
+        float transformed_vertices[252];
+
+        // Carry over the color
+        for (int i = 0; i < vertex_count; i++) {
+            transformed_vertices[i * vertex_size + 4] = vertices[i * vertex_size + 4];
+            transformed_vertices[i * vertex_size + 5] = vertices[i * vertex_size + 5];
+            transformed_vertices[i * vertex_size + 6] = vertices[i * vertex_size + 6];
+        }
+        
+        for (int a = 0; a < vertex_count; a++) {
+            float *vector = malloc(sizeof(float) * vertex_dim);
+            for (int b = 0; b < vertex_dim; b++) {
+                vector[b] = vertices[a * vertex_size + b];
+            }
+
+            float *new_vector = transform_vector(rotation_matrix_x, vector, vertex_dim);
+            new_vector = transform_vector(rotation_matrix_y, new_vector, vertex_dim);
+            new_vector = transform_vector(rotation_matrix_z, new_vector, vertex_dim);
+            for (int b = 0; b < vertex_dim; b++) {
+                transformed_vertices[a * vertex_size + b] = new_vector[b] + camera_position[b];
+            }
+        }
+
+        memcpy(data, transformed_vertices, memory_requirements.size);
 
         handle_error(vkBeginCommandBuffer(
             command_buffer,
