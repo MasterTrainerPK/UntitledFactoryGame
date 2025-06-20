@@ -750,16 +750,18 @@ int main() {
         }
         const double alpha = (double)accumulator / dt;
         //lerp state and render state;
-        printf("%s", "Beginning new frame\n");
+        //printf("%s", "Beginning new frame\n");
 
         vkWaitForFences(device, 1, &in_flight_fence_array[current_frame], VK_TRUE, UINT64_MAX);
         vkResetFences(device, 1, &in_flight_fence_array[current_frame]);
         vkResetCommandBuffer(command_buffer, 0x0);
 
-        float *new_vertices = malloc(sizeof(float) * vertex_count);
+        float *new_vertices = malloc(sizeof(float) * vertex_size * vertex_count);
         for (int i = 0; i < vertex_count; i++) {
-            new_vertices[i * vertex_size] = cos(t);
-            new_vertices[i * vertex_size + 1] = sin(t);
+            new_vertices[i * vertex_size] = cos((double)t / 10000);
+            new_vertices[i * vertex_size + 1] = sin((double)t / 10000);
+            new_vertices[i * vertex_size + 2] = 0.0f;
+            new_vertices[i * vertex_size + 3] = 1.0f;
         }
         memcpy(data, new_vertices, memory_requirements.size);
 
@@ -804,11 +806,11 @@ int main() {
             },
             VK_SUBPASS_CONTENTS_INLINE
         );
-        printf("%s", "Command buffer and render pass have begun\n");
+        //printf("%s", "Command buffer and render pass have begun\n");
 
         uint32_t image_index;
         vkAcquireNextImageKHR(device, swapchain, UINT64_MAX, image_available_semaphore_array[current_frame], VK_NULL_HANDLE, &image_index);
-        printf("%s", "Ready to submit commands\n");
+        //printf("%s", "Ready to submit commands\n");
 
         vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
         VkDeviceSize offsets[1] = {0};
@@ -834,7 +836,7 @@ int main() {
             },
             in_flight_fence_array[current_frame]
         );
-        printf("%s", "Commands submitted\n");
+        //printf("%s", "Commands submitted\n");
         vkWaitForFences(device, 1, &in_flight_fence_array[current_frame], VK_TRUE, UINT64_MAX);
 
         vkQueuePresentKHR(
@@ -850,7 +852,7 @@ int main() {
                 .pResults = NULL
             }
         );
-        printf("%s", "Image presented\n");
+        //printf("%s", "Image presented\n");
 
         current_frame = (current_frame + 1) % image_count;
 
