@@ -736,7 +736,7 @@ int main() {
     }
     while(!glfwWindowShouldClose(window) && glfwGetMouseButton(window, 1) != GLFW_PRESS) {
         struct timespec new_time;
-        if(clock_gettime(CLOCK_MONOTONIC, &curr_time) != 0) {
+        if(clock_gettime(CLOCK_MONOTONIC, &new_time) != 0) {
             perror("failed to get time during loop");
             goto destroy_flight_fences;
         }
@@ -762,9 +762,9 @@ int main() {
         vkResetCommandBuffer(command_buffer, 0x0);
 
         float vertices[12] = {
-            0.0f, -0.5f, 0.0f, 1.0f,
-            0.5f, 0.5f, 0.0f, 1.0f,
-            -0.5f, 0.5f, 0.0f, 1.0f };
+            0.5f * (float)sin((double)curr_time.tv_nsec / 1000000000.0 * 2.0 * 3.1415), -0.5f * (float)cos((double)curr_time.tv_nsec / 1000000000.0 * 2.0 * 3.1415), 0.0f, 1.0f,
+            0.5f * (float)sin((double)curr_time.tv_nsec / 1000000000.0 * 2.0 * 3.1415 + 3.1415 * 0.6666), -0.5f * (float)cos((double)curr_time.tv_nsec / 1000000000.0 * 2.0 * 3.1415 + 3.1415 * 0.6666), 0.0f, 1.0f,
+            0.5f * (float)sin((double)curr_time.tv_nsec / 1000000000.0 * 2.0 * 3.1415 + 3.1415 * 1.3333), -0.5f * (float)cos((double)curr_time.tv_nsec / 1000000000.0 * 2.0 * 3.1415 + 3.1415 * 1.3333), 0.0f, 1.0f };
         memcpy(data, vertices, memory_requirements.size);
 
         handle_error(vkBeginCommandBuffer(
