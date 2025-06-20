@@ -313,7 +313,7 @@ int main() {
             .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
             .pNext = NULL,
             .flags = 0x0,
-            .attachmentCount = image_count,
+            .attachmentCount = 1,
             .pAttachments = attachment_description_array,
             .subpassCount = 1,
             .pSubpasses = subpass_description_array,
@@ -366,24 +366,29 @@ int main() {
         image_view_array[created_image_views] = image_view;
     }
 
-    VkFramebuffer framebuffer;
-    handle_error(vkCreateFramebuffer(
-        device,
-        &(VkFramebufferCreateInfo) {
-            .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
-            .pNext = NULL,
-            .flags = 0x0,
-            .renderPass = render_pass,
-            .attachmentCount = image_count,
-            .pAttachments = image_view_array,
-            .width = width,
-            .height = height, 
-            .layers = 1
-        },
-        NULL,
-        &framebuffer
-    ), destroy_image_views);
-    printf("%s", "Frame buffer created\n");
+    VkFramebuffer *framebuffer_array = malloc(sizeof(VkFramebuffer) * image_count);
+    int created_framebuffers;
+    for (created_framebuffers = 0; created_framebuffers < image_count; created_framebuffers++) {
+        VkFramebuffer framebuffer;
+        handle_error(vkCreateFramebuffer(
+            device,
+            &(VkFramebufferCreateInfo) {
+                .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
+                .pNext = NULL,
+                .flags = 0x0,
+                .renderPass = render_pass,
+                .attachmentCount = 1,
+                .pAttachments = &image_view_array[created_framebuffers],
+                .width = width,
+                .height = height, 
+                .layers = 1
+            },
+            NULL,
+            &framebuffer
+        ), destroy_image_views);
+        framebuffer_array[created_framebuffers] = framebuffer;
+    }
+    printf("%s", "Frame buffers created\n");
 
     FILE *f_model = fopen("cube.obj", "r");
 
@@ -393,10 +398,10 @@ int main() {
     float vertex_2[4] = {0.5f, 0.5f, 0.0f, 1.0f};
     float vertex_3[4] = {-0.5f, 0.5f, 0.0f, 1.0f};
     //float *model_data[3] = {vertex_1, vertex_2, vertex_3};
-    float vertices[12] = {
-        0.0f, -0.5f, 0.0f, 1.0f,
-        0.5f, 0.5f, 0.0f, 1.0f,
-        -0.5f, 0.5f, 0.0f, 1.0f };
+    //float vertices[12] = {
+    //    0.0f, -0.5f, 0.0f, 1.0f,
+    //    0.5f, 0.5f, 0.0f, 1.0f,
+    //    -0.5f, 0.5f, 0.0f, 1.0f };
 
     VkVertexInputBindingDescription vertex_binding_description = (VkVertexInputBindingDescription) {
         .binding = 0,
@@ -426,7 +431,7 @@ int main() {
         },
         NULL,
         &vertex_buffer
-    ), destroy_frame_buffer);
+    ), destroy_frame_buffers);
 
     VkMemoryRequirements memory_requirements;
     vkGetBufferMemoryRequirements(device, vertex_buffer, &memory_requirements);
@@ -463,7 +468,7 @@ int main() {
     FILE *f_vertex = fopen("shaders/vert.spv", "rb");
     if(f_vertex == NULL) {
         perror("failed to open file");
-        goto destroy_frame_buffer;
+        goto free_vertex_memory;
     }
     fseek(f_vertex, 0, SEEK_END);
     long fsize_vertex = ftell(f_vertex);
@@ -756,14 +761,11 @@ int main() {
         vkResetFences(device, 1, &in_flight_fence_array[current_frame]);
         vkResetCommandBuffer(command_buffer, 0x0);
 
-        float *new_vertices = malloc(sizeof(float) * vertex_size * vertex_count);
-        for (int i = 0; i < vertex_count; i++) {
-            new_vertices[i * vertex_size] = cos((double)t / 10000);
-            new_vertices[i * vertex_size + 1] = sin((double)t / 10000);
-            new_vertices[i * vertex_size + 2] = 0.0f;
-            new_vertices[i * vertex_size + 3] = 1.0f;
-        }
-        memcpy(data, new_vertices, memory_requirements.size);
+        float vertices[12] = {
+            0.0f, -0.5f, 0.0f, 1.0f,
+            0.5f, 0.5f, 0.0f, 1.0f,
+            -0.5f, 0.5f, 0.0f, 1.0f };
+        memcpy(data, vertices, memory_requirements.size);
 
         handle_error(vkBeginCommandBuffer(
             command_buffer,
@@ -776,7 +778,7 @@ int main() {
                     .pNext = NULL,
                     .renderPass = render_pass,
                     .subpass = 0,
-                    .framebuffer = framebuffer,
+                    .framebuffer = framebuffer_array[current_frame],
                     .occlusionQueryEnable = VK_TRUE,
                     .queryFlags = 0x0,
                     .pipelineStatistics = 0x0,
@@ -796,7 +798,7 @@ int main() {
                 .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
                 .pNext = NULL,
                 .renderPass = render_pass,
-                .framebuffer = framebuffer,
+                .framebuffer = framebuffer_array[current_frame],
                 .renderArea = (VkRect2D) {
                     .offset = {0, 0},
                     .extent = image_extent
@@ -883,8 +885,10 @@ free_vertex_memory:
     vkFreeMemory(device, vertex_memory, NULL);
 destroy_vertex_buffer:
     vkDestroyBuffer(device, vertex_buffer, NULL);
-destroy_frame_buffer:
-    vkDestroyFramebuffer(device, framebuffer, NULL);
+destroy_frame_buffers:
+    for (int i = 0; i < created_framebuffers; i++) {
+        vkDestroyFramebuffer(device, framebuffer_array[i], NULL);
+    }
 destroy_image_views:
     for(int i = 0; i < created_image_views; i++) {
         VkImageView image_view = image_view_array[i];
