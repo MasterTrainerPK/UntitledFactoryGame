@@ -782,9 +782,9 @@ int main() {
         vkResetFences(device, 1, &in_flight_fence_array[current_frame]);
         vkResetCommandBuffer(command_buffer, 0x0);
 
-        float camera_position[4] = {0.0f, 0.0f, 0.5f, 0.0f};
+        float camera_position[4] = {0.0f, 0.0f, 1.5f, 0.0f};
 
-        double theta = (double)curr_time.tv_nsec / 1000000000.0 * 2 * 3.1415;
+        double theta = ((double)curr_time.tv_nsec / 1000000000.0 + (double)curr_time.tv_sec);
 
         float rotation_matrix_x[16] = {
             1.0f, 0.0f, 0.0f, 0.0f,
