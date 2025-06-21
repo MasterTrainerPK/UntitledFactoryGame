@@ -16,6 +16,7 @@ void error_handle_glfw(int e, const char* msg) {
 float *transform_vector(float *matrix, float *vector, int dimension) {
     float *new_vector = malloc(sizeof(float) * dimension);
     for (int a = 0; a < dimension; a++) {
+        new_vector[a] = 0.0f;
         for (int b = 0; b < dimension; b++) {
             new_vector[a] += matrix[a * dimension + b] * vector[b];
         }
