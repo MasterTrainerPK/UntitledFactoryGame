@@ -13,6 +13,38 @@ void error_handle_glfw(int e, const char* msg) {
     fprintf(stderr, "GLFW ERR: %d, MSG: %s", e, msg);
 }
 
+struct graphics_state {
+    VkResult last_error;
+    VkInstance instance;
+    VkPhysicalDevice* physical_device_array;
+    int physical_device_len;
+    VkPhysicalDevice physical_device;
+    int queue_family_index;
+    VkDevice device;
+    GLFWmonitor* monitor;
+    VkSurfaceKHR surface;
+    VkExtent2D image_extent;
+    VkSwapchainKHR swapchain;
+    VkQueue queue;
+    VkCommandPool command_pool;
+    VkCommandBuffer command_buffer;
+    VkRenderPass render_pass;
+    VkImage* swapchain_image_array;
+    VkImageView* swapchain_image_view_array;
+    VkSemaphore* swapchain_image_available_semaphore_array;
+    VkSemaphore* swapchain_render_finished_semaphore_array;
+    VkFence swapchain_in_flight_fence_array;
+    int swapchian_image_len;
+    VkFramebuffer* framebuffer_array;
+    int framebuffer_len;
+    VkBuffer vertex_buffer;
+    VkDeviceMemory vertex_memory;
+    VkShaderModule vertex_shader_module;
+    VkShaderModule fragment_shader_module;
+    VkPipelineLayout pipeline_layout;
+    VkPipeline pipeline;
+};
+
 float *transform_vector(float *matrix, float *vector, int dimension) {
     float *new_vector = malloc(sizeof(float) * dimension);
     for (int a = 0; a < dimension; a++) {
