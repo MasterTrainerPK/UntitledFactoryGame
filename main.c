@@ -29,63 +29,66 @@ int main() {
     create_graphics_state(&graphics);
 
     int vertex_count = 36;
-    int vertex_dim = 4;
+    int vertex_dim = 3;
     int vertex_color = 3;
     int vertex_size = vertex_dim + vertex_color;
 
-    void *data;
-    vkMapMemory(graphics.device, graphics.vertex_memory, 0, sizeof(float) * vertex_size * vertex_count, 0x0, &data);
+    struct graphics_buffer vertex_buffer;
+    create_graphics_buffer(&graphics, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, sizeof(float) * vertex_size * vertex_count, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &vertex_buffer);
 
-    float vertices[252] = {
-        //x, y, z, w, r, g, b
+    void *data;
+    vkMapMemory(graphics.device, vertex_buffer.memory, 0, vertex_buffer.size, 0x0, &data);
+
+    float vertices[216] = {
+        //x, y, z, r, g, b
 
         // Front face
-        0.5f,  0.5f,  -0.5f, 1.0f,  1.0f,  1.0f,  0.0f,
-        -0.5f, 0.5f,  -0.5f, 1.0f,  0.0f,  1.0f,  0.0f,
-        0.5f,  -0.5f, -0.5f, 1.0f,  1.0f,  0.0f,  0.0f,
-        -0.5f, -0.5f, -0.5f, 1.0f,  0.0f,  0.0f,  0.0f,
-        0.5f,  -0.5f, -0.5f, 1.0f,  1.0f,  0.0f,  0.0f,
-        -0.5f,  0.5f, -0.5f, 1.0f,  0.0f,  1.0f,  0.0f,
+        0.5f,  0.5f,  -0.5f, 1.0f,  1.0f,  0.0f,
+        -0.5f, 0.5f,  -0.5f, 0.0f,  1.0f,  0.0f,
+        0.5f,  -0.5f, -0.5f, 1.0f,  0.0f,  0.0f,
+        -0.5f, -0.5f, -0.5f, 0.0f,  0.0f,  0.0f,
+        0.5f,  -0.5f, -0.5f, 1.0f,  0.0f,  0.0f,
+        -0.5f,  0.5f, -0.5f, 0.0f,  1.0f,  0.0f,
 
         // Back face
-        0.5f,  0.5f,  0.5f,  1.0f,  1.0f,  1.0f,  1.0f,
-        0.5f,  -0.5f, 0.5f,  1.0f,  1.0f,  0.0f,  1.0f,
-        -0.5f, 0.5f,  0.5f,  1.0f,  0.0f,  1.0f,  1.0f,
-        -0.5f, -0.5f, 0.5f,  1.0f,  0.0f,  0.0f,  1.0f,
-        -0.5f, 0.5f,  0.5f,  1.0f,  0.0f,  1.0f,  1.0f,
-        0.5f,  -0.5f, 0.5f,  1.0f,  1.0f,  0.0f,  1.0f,
+        0.5f,  0.5f,  0.5f,  1.0f,  1.0f,  1.0f,
+        0.5f,  -0.5f, 0.5f,  1.0f,  0.0f,  1.0f,
+        -0.5f, 0.5f,  0.5f,  0.0f,  1.0f,  1.0f,
+        -0.5f, -0.5f, 0.5f,  0.0f,  0.0f,  1.0f,
+        -0.5f, 0.5f,  0.5f,  0.0f,  1.0f,  1.0f,
+        0.5f,  -0.5f, 0.5f,  1.0f,  0.0f,  1.0f,
 
         // Right face
-        0.5f,  0.5f,  0.5f,  1.0f,  1.0f,  1.0f,  1.0f,
-        0.5f,  0.5f,  -0.5f, 1.0f,  1.0f,  1.0f,  0.0f,
-        0.5f,  -0.5f, 0.5f,  1.0f,  1.0f,  0.0f,  1.0f,
-        0.5f,  -0.5f, -0.5f, 1.0f,  1.0f,  0.0f,  0.0f,
-        0.5f,  -0.5f, 0.5f,  1.0f,  1.0f,  0.0f,  1.0f,
-        0.5f,  0.5f,  -0.5f, 1.0f,  1.0f,  1.0f,  0.0f,
+        0.5f,  0.5f,  0.5f,  1.0f,  1.0f,  1.0f,
+        0.5f,  0.5f,  -0.5f, 1.0f,  1.0f,  0.0f,
+        0.5f,  -0.5f, 0.5f,  1.0f,  0.0f,  1.0f,
+        0.5f,  -0.5f, -0.5f, 1.0f,  0.0f,  0.0f,
+        0.5f,  -0.5f, 0.5f,  1.0f,  0.0f,  1.0f,
+        0.5f,  0.5f,  -0.5f, 1.0f,  1.0f,  0.0f,
 
         // Left face
-        -0.5f, 0.5f,  0.5f,  1.0f,  0.0f,  1.0f,  1.0f,
-        -0.5f, -0.5f, 0.5f,  1.0f,  0.0f,  0.0f,  1.0f,
-        -0.5f, 0.5f,  -0.5f, 1.0f,  0.0f,  1.0f,  0.0f,
-        -0.5f, -0.5f, -0.5f, 1.0f,  0.0f,  0.0f,  0.0f,
-        -0.5f, 0.5f,  -0.5f, 1.0f,  0.0f,  1.0f,  0.0f,
-        -0.5f, -0.5f, 0.5f,  1.0f,  0.0f,  0.0f,  1.0f,
+        -0.5f, 0.5f,  0.5f,  0.0f,  1.0f,  1.0f,
+        -0.5f, -0.5f, 0.5f,  0.0f,  0.0f,  1.0f,
+        -0.5f, 0.5f,  -0.5f, 0.0f,  1.0f,  0.0f,
+        -0.5f, -0.5f, -0.5f, 0.0f,  0.0f,  0.0f,
+        -0.5f, 0.5f,  -0.5f, 0.0f,  1.0f,  0.0f,
+        -0.5f, -0.5f, 0.5f,  0.0f,  0.0f,  1.0f,
 
         // Top face
-        0.5f,  -0.5f, -0.5f, 1.0f,  1.0f,  0.0f,  0.0f,
-        -0.5f, -0.5f, -0.5f, 1.0f,  0.0f,  0.0f,  0.0f,
-        0.5f,  -0.5f, 0.5f,  1.0f,  1.0f,  0.0f,  1.0f,
-        -0.5f, -0.5f, 0.5f,  1.0f,  0.0f,  0.0f,  1.0f,
-        0.5f,  -0.5f, 0.5f,  1.0f,  1.0f,  0.0f,  1.0f,
-        -0.5f, -0.5f, -0.5f, 1.0f,  0.0f,  0.0f,  0.0f,
+        0.5f,  -0.5f, -0.5f, 1.0f,  0.0f,  0.0f,
+        -0.5f, -0.5f, -0.5f, 0.0f,  0.0f,  0.0f,
+        0.5f,  -0.5f, 0.5f,  1.0f,  0.0f,  1.0f,
+        -0.5f, -0.5f, 0.5f,  0.0f,  0.0f,  1.0f,
+        0.5f,  -0.5f, 0.5f,  1.0f,  0.0f,  1.0f,
+        -0.5f, -0.5f, -0.5f, 0.0f,  0.0f,  0.0f,
 
         // Bottom face
-        0.5f,  0.5f,  -0.5f, 1.0f,  1.0f,  1.0f,  0.0f,
-        0.5f,  0.5f,   0.5f, 1.0f,  1.0f,  1.0f,  1.0f,
-        -0.5f, 0.5f,  -0.5f, 1.0f,  0.0f,  1.0f,  0.0f,
-        -0.5f, 0.5f,  0.5f,  1.0f,  0.0f,  1.0f,  1.0f,
-        -0.5f, 0.5f,  -0.5f, 1.0f,  0.0f,  1.0f,  0.0f,
-        0.5f,  0.5f,  0.5f,  1.0f,  1.0f,  1.0f,  1.0f,
+        0.5f,  0.5f,  -0.5f, 1.0f,  1.0f,  0.0f,
+        0.5f,  0.5f,   0.5f, 1.0f,  1.0f,  1.0f,
+        -0.5f, 0.5f,  -0.5f, 0.0f,  1.0f,  0.0f,
+        -0.5f, 0.5f,  0.5f,  0.0f,  1.0f,  1.0f,
+        -0.5f, 0.5f,  -0.5f, 0.0f,  1.0f,  0.0f,
+        0.5f,  0.5f,  0.5f,  1.0f,  1.0f,  1.0f,
     };
 
     uint32_t current_frame = 0;
@@ -125,7 +128,7 @@ int main() {
         vkResetFences(graphics.device, 1, &graphics.swapchain_in_flight_fence_array[current_frame]);
         vkResetCommandBuffer(graphics.command_buffer, 0x0);
 
-        float camera_position[4] = {0.0f, 0.0f, 1.5f, 0.0f};
+        float camera_position[3] = {0.0f, 0.0f, 1.5f};
 
         double theta = ((double)curr_time.tv_nsec / 1000000000.0 + (double)curr_time.tv_sec);
 
@@ -154,9 +157,9 @@ int main() {
 
         // Carry over the color
         for (int i = 0; i < vertex_count; i++) {
+            transformed_vertices[i * vertex_size + 3] = vertices[i * vertex_size + 3];
             transformed_vertices[i * vertex_size + 4] = vertices[i * vertex_size + 4];
             transformed_vertices[i * vertex_size + 5] = vertices[i * vertex_size + 5];
-            transformed_vertices[i * vertex_size + 6] = vertices[i * vertex_size + 6];
         }
         
         for (int a = 0; a < vertex_count; a++) {
@@ -164,16 +167,17 @@ int main() {
             for (int b = 0; b < vertex_dim; b++) {
                 vector[b] = vertices[a * vertex_size + b];
             }
+            vector[vertex_dim] = 1.0f;
 
-            float *new_vector = transform_vector(rotation_matrix_x, vector, vertex_dim);
-            new_vector = transform_vector(rotation_matrix_y, new_vector, vertex_dim);
-            new_vector = transform_vector(rotation_matrix_z, new_vector, vertex_dim);
+            float *new_vector = transform_vector(rotation_matrix_x, vector, vertex_dim + 1);
+            new_vector = transform_vector(rotation_matrix_y, new_vector, vertex_dim + 1);
+            new_vector = transform_vector(rotation_matrix_z, new_vector, vertex_dim + 1);
             for (int b = 0; b < vertex_dim; b++) {
                 transformed_vertices[a * vertex_size + b] = new_vector[b] + camera_position[b];
             }
         }
 
-        memcpy(data, transformed_vertices, graphics.vertex_memory_requirements.size);
+        memcpy(data, transformed_vertices, vertex_buffer.size);
 
         handle_error(vkBeginCommandBuffer(
             graphics.command_buffer,
@@ -224,7 +228,7 @@ int main() {
 
         vkCmdBindPipeline(graphics.command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphics.pipeline);
         VkDeviceSize offsets[1] = {0};
-        vkCmdBindVertexBuffers(graphics.command_buffer, 0, 1, &graphics.vertex_buffer, offsets);
+        vkCmdBindVertexBuffers(graphics.command_buffer, 0, 1, &vertex_buffer.buffer, offsets);
         vkCmdDraw(graphics.command_buffer, vertex_count, 1, 0, 0);
         vkCmdEndRenderPass(graphics.command_buffer);
         vkEndCommandBuffer(graphics.command_buffer);

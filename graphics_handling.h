@@ -13,6 +13,14 @@ void error_handle_glfw(int e, const char* msg) {
     fprintf(stderr, "GLFW ERR: %d, MSG: %s", e, msg);
 }
 
+struct graphics_buffer {
+    VkBuffer buffer;
+    VkDeviceMemory memory;
+    VkBufferUsageFlagBits usage;
+    VkMemoryPropertyFlagBits properties;
+    unsigned long long size;
+};
+
 struct graphics_state {
     VkResult last_error;
     const char** extension_array;
@@ -47,15 +55,73 @@ struct graphics_state {
     uint32_t swapchain_in_flight_fence_len;
     VkFramebuffer* framebuffer_array;
     uint32_t framebuffer_len;
-    VkBuffer vertex_buffer;
-    VkMemoryRequirements vertex_memory_requirements;
-    VkPhysicalDeviceMemoryProperties vertex_memory_properties;
-    VkDeviceMemory vertex_memory;
+    struct graphics_buffer* buffer_array;
+    uint32_t buffer_len;
     VkShaderModule vertex_shader_module;
     VkShaderModule fragment_shader_module;
     VkPipelineLayout pipeline_layout;
     VkPipeline pipeline;
 };
+
+int create_graphics_buffer(struct graphics_state *graphics_state, VkBufferUsageFlagBits usage, unsigned long long size, VkMemoryPropertyFlagBits memory_property_flags, struct graphics_buffer *graphics_buffer) {
+    int error_code = EXIT_SUCCESS;
+    VkResult vk_result;
+
+    graphics_buffer -> size = size;
+    graphics_buffer -> usage = usage;
+
+    handle_error(vkCreateBuffer(
+        graphics_state -> device,
+        &(VkBufferCreateInfo) {
+            .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+            .pNext = NULL,
+            .flags = 0x0,
+            .size = graphics_buffer -> size,
+            .usage = graphics_buffer -> usage,
+            .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+            .queueFamilyIndexCount = 0,
+            .pQueueFamilyIndices = NULL
+        },
+        NULL,
+        &graphics_buffer -> buffer
+    ), exit_function);
+
+    VkMemoryRequirements memory_requirements;
+    vkGetBufferMemoryRequirements(graphics_state -> device, graphics_buffer -> buffer, &memory_requirements);
+
+    VkPhysicalDeviceMemoryProperties memory_properties;
+    vkGetPhysicalDeviceMemoryProperties(graphics_state -> physical_device, &memory_properties);
+
+    int memory_index;
+    for (memory_index = 0; memory_index < memory_properties.memoryTypeCount; memory_index++) {
+        if ((memory_requirements.memoryTypeBits & (1 << memory_index)) && (memory_properties.memoryTypes[memory_index].propertyFlags & memory_property_flags) == memory_property_flags) {
+            break;
+        }
+    }
+
+    handle_error(vkAllocateMemory(
+        graphics_state -> device,
+        &(VkMemoryAllocateInfo) {
+            .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+            .pNext = NULL,
+            .allocationSize = memory_requirements.size,
+            .memoryTypeIndex = memory_index
+        },
+        NULL,
+        &graphics_buffer -> memory
+    ), destroy_buffer);
+
+    vkBindBufferMemory(graphics_state -> device, graphics_buffer -> buffer, graphics_buffer -> memory, 0);
+    graphics_state -> buffer_array[graphics_state -> buffer_len] = *graphics_buffer;
+    graphics_state -> buffer_len += 1;
+
+    return error_code;
+
+destroy_buffer:
+    vkDestroyBuffer(graphics_state -> device, graphics_buffer -> buffer, NULL);
+exit_function:
+    return error_code;
+}
 
 int create_graphics_state(struct graphics_state *graphics_ptr) {
     int error_code = EXIT_SUCCESS;
@@ -431,7 +497,7 @@ int create_graphics_state(struct graphics_state *graphics_ptr) {
     FILE *f_model = fopen("cube.obj", "r");
 
     int vertex_count = 36;
-    int vertex_dim = 4;
+    int vertex_dim = 3;
     int vertex_color = 3;
     int vertex_size = vertex_dim + vertex_color;
     //float vertex_1[4] = {0.0f, -0.5f, 0.0f, 1.0f};
@@ -451,7 +517,7 @@ int create_graphics_state(struct graphics_state *graphics_ptr) {
 
     VkVertexInputAttributeDescription vertex_attribute_description_position = (VkVertexInputAttributeDescription) {
         .location = 0,
-        .format = VK_FORMAT_R32G32B32A32_SFLOAT,
+        .format = VK_FORMAT_R32G32B32_SFLOAT,
         .binding = 0,
         .offset = 0
     };
@@ -465,51 +531,10 @@ int create_graphics_state(struct graphics_state *graphics_ptr) {
 
     VkVertexInputAttributeDescription vertex_attribute_description_array[2] = {vertex_attribute_description_position, vertex_attribute_description_color};
 
-    handle_error(vkCreateBuffer(
-        graphics_ptr -> device,
-        &(VkBufferCreateInfo) {
-            .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-            .pNext = NULL,
-            .flags = 0x0,
-            .size = sizeof(float) * vertex_size * vertex_count,
-            .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-            .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
-            .queueFamilyIndexCount = 0,
-            .pQueueFamilyIndices = NULL
-        },
-        NULL,
-        &graphics_ptr -> vertex_buffer
-    ), destroy_frame_buffers);
-
-    vkGetBufferMemoryRequirements(graphics_ptr -> device, graphics_ptr -> vertex_buffer, &graphics_ptr -> vertex_memory_requirements);
-    vkGetPhysicalDeviceMemoryProperties(graphics_ptr -> physical_device, &graphics_ptr -> vertex_memory_properties);
-
-    int memory_index;
-    for (int i = 0; graphics_ptr -> vertex_memory_properties.memoryTypeCount; i++) {
-        if ((graphics_ptr -> vertex_memory_requirements.memoryTypeBits & (1 << i)) && (graphics_ptr -> vertex_memory_properties.memoryTypes[i].propertyFlags & (VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)) == (VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)) {
-            memory_index = i;
-            break;
-        }
-    }
-
-    handle_error(vkAllocateMemory(
-        graphics_ptr -> device,
-        &(VkMemoryAllocateInfo) {
-            .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-            .pNext = NULL,
-            .allocationSize = graphics_ptr -> vertex_memory_requirements.size,
-            .memoryTypeIndex = memory_index
-        },
-        NULL,
-        &graphics_ptr -> vertex_memory
-    ), destroy_vertex_buffer);
-
-    vkBindBufferMemory(graphics_ptr -> device, graphics_ptr -> vertex_buffer, graphics_ptr -> vertex_memory, 0);
-
     FILE *f_vertex = fopen("shaders/vert.spv", "rb");
     if(f_vertex == NULL) {
         perror("failed to open file");
-        goto free_vertex_memory;
+        goto destroy_frame_buffers;
     }
     fseek(f_vertex, 0, SEEK_END);
     long fsize_vertex = ftell(f_vertex);
@@ -529,7 +554,7 @@ int create_graphics_state(struct graphics_state *graphics_ptr) {
         },
         NULL,
         &graphics_ptr -> vertex_shader_module
-    ), free_vertex_memory);
+    ), destroy_frame_buffers);
     FILE *f_fragment = fopen("shaders/frag.spv", "rb");
     if(f_fragment == NULL) {
         perror("failed to open file");
@@ -781,10 +806,6 @@ destroy_fragment_shader_module:
     vkDestroyShaderModule(graphics_ptr -> device, graphics_ptr -> fragment_shader_module, NULL);
 destroy_vertex_shader_module:
     vkDestroyShaderModule(graphics_ptr -> device, graphics_ptr -> vertex_shader_module, NULL);
-free_vertex_memory:
-    vkFreeMemory(graphics_ptr -> device, graphics_ptr -> vertex_memory, NULL);
-destroy_vertex_buffer:
-    vkDestroyBuffer(graphics_ptr -> device, graphics_ptr -> vertex_buffer, NULL);
 destroy_frame_buffers:
     for (int i = 0; i < graphics_ptr -> framebuffer_len; i++) {
         vkDestroyFramebuffer(graphics_ptr -> device, graphics_ptr -> framebuffer_array[i], NULL);
@@ -829,8 +850,11 @@ void cleanup(struct graphics_state *graphics_ptr) {
     vkDestroyPipelineLayout(graphics_ptr -> device, graphics_ptr -> pipeline_layout, NULL);
     vkDestroyShaderModule(graphics_ptr -> device, graphics_ptr -> fragment_shader_module, NULL);
     vkDestroyShaderModule(graphics_ptr -> device, graphics_ptr -> vertex_shader_module, NULL);
-    vkFreeMemory(graphics_ptr -> device, graphics_ptr -> vertex_memory, NULL);
-    vkDestroyBuffer(graphics_ptr -> device, graphics_ptr -> vertex_buffer, NULL);
+    for (int i = 0; i < graphics_ptr -> buffer_len; i++) {
+        vkFreeMemory(graphics_ptr -> device, graphics_ptr -> buffer_array[i].memory, NULL);
+        vkDestroyBuffer(graphics_ptr -> device, graphics_ptr -> buffer_array[i].buffer, NULL);
+    }
+    
     for (int i = 0; i < graphics_ptr -> framebuffer_len; i++) {
         vkDestroyFramebuffer(graphics_ptr -> device, graphics_ptr -> framebuffer_array[i], NULL);
     }
