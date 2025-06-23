@@ -123,7 +123,7 @@ exit_function:
     return error_code;
 }
 
-int create_graphics_state(struct graphics_state *graphics_buffer) {
+int create_graphics_state(struct graphics_state *graphics_ptr) {
     int error_code = EXIT_SUCCESS;
     VkResult vk_result;
 
@@ -144,15 +144,15 @@ int create_graphics_state(struct graphics_state *graphics_buffer) {
     }
 
     {
-        const char** glfw_extensions = glfwGetRequiredInstanceExtensions(&graphics_buffer -> extension_num);
-        graphics_buffer -> extension_array = malloc(sizeof(char*) * graphics_buffer -> extension_num + 0);
-        for(int i = 0; i < graphics_buffer -> extension_num; i++) {
-            graphics_buffer -> extension_array[i] = glfw_extensions[i];
+        const char** glfw_extensions = glfwGetRequiredInstanceExtensions(&graphics_ptr -> extension_num);
+        graphics_ptr -> extension_array = malloc(sizeof(char*) * graphics_ptr -> extension_num + 0);
+        for(int i = 0; i < graphics_ptr -> extension_num; i++) {
+            graphics_ptr -> extension_array[i] = glfw_extensions[i];
         }
         //extensions[instance_extension_count] = "VK_KHR_swapchain";
         printf("%s", "Loading extensions\n");
-        for(int i = 0; i < graphics_buffer -> extension_num; i++) {
-            printf("%s\n", graphics_buffer -> extension_array[i]);
+        for(int i = 0; i < graphics_ptr -> extension_num; i++) {
+            printf("%s\n", graphics_ptr -> extension_array[i]);
         }
     }
     printf("%s", "GLFW initialized\n");
@@ -175,25 +175,25 @@ int create_graphics_state(struct graphics_state *graphics_buffer) {
             },
             .enabledLayerCount = layer_count,
             .ppEnabledLayerNames = layers,
-            .enabledExtensionCount = graphics_buffer -> extension_num,
-            .ppEnabledExtensionNames = graphics_buffer -> extension_array
+            .enabledExtensionCount = graphics_ptr -> extension_num,
+            .ppEnabledExtensionNames = graphics_ptr -> extension_array
         }, 
         NULL, 
-        &graphics_buffer -> instance
+        &graphics_ptr -> instance
     ), exit_GLFW);
     printf("%s", "Instance created\n");
 
     {
         // order of priority is descrete, integrated, virtual, cpu, other
         int type_to_prio[5] = { 4, 1, 0, 2, 3 };
-        handle_error(vkEnumeratePhysicalDevices(graphics_buffer -> instance, &graphics_buffer -> physical_device_len, NULL), destroy_instance);
-        graphics_buffer -> physical_device_array = malloc(sizeof(VkPhysicalDevice)*graphics_buffer -> physical_device_len);
-        handle_error(vkEnumeratePhysicalDevices(graphics_buffer -> instance, &graphics_buffer -> physical_device_len, graphics_buffer -> physical_device_array), destroy_instance);
+        handle_error(vkEnumeratePhysicalDevices(graphics_ptr -> instance, &graphics_ptr -> physical_device_len, NULL), destroy_instance);
+        graphics_ptr -> physical_device_array = malloc(sizeof(VkPhysicalDevice)*graphics_ptr -> physical_device_len);
+        handle_error(vkEnumeratePhysicalDevices(graphics_ptr -> instance, &graphics_ptr -> physical_device_len, graphics_ptr -> physical_device_array), destroy_instance);
         int best_i = 0;
         int best_prio = 5;
-        for(int i = 0; i < graphics_buffer -> physical_device_len; i++) {
+        for(int i = 0; i < graphics_ptr -> physical_device_len; i++) {
             VkPhysicalDeviceProperties properties;
-            vkGetPhysicalDeviceProperties(graphics_buffer -> physical_device_array[i], &properties);
+            vkGetPhysicalDeviceProperties(graphics_ptr -> physical_device_array[i], &properties);
             if(type_to_prio[properties.deviceType] < best_prio) {
                 best_i = i;
                 best_prio = type_to_prio[properties.deviceType];
@@ -202,17 +202,17 @@ int create_graphics_state(struct graphics_state *graphics_buffer) {
                 }
             }
         }
-        graphics_buffer -> physical_device = graphics_buffer -> physical_device_array[best_i];
-        free(graphics_buffer -> physical_device_array);
+        graphics_ptr -> physical_device = graphics_ptr -> physical_device_array[best_i];
+        free(graphics_ptr -> physical_device_array);
     }
 
     uint32_t queue_family_num;
-    vkGetPhysicalDeviceQueueFamilyProperties(graphics_buffer -> physical_device, &queue_family_num, NULL);
+    vkGetPhysicalDeviceQueueFamilyProperties(graphics_ptr -> physical_device, &queue_family_num, NULL);
     VkQueueFamilyProperties* queue_family_properties = malloc(sizeof(VkQueueFamilyProperties)*queue_family_num);
-    vkGetPhysicalDeviceQueueFamilyProperties(graphics_buffer -> physical_device, &queue_family_num, queue_family_properties);
-    for(graphics_buffer -> queue_family_index = 0;
-        !(queue_family_properties[graphics_buffer -> queue_family_index].queueFlags | VK_QUEUE_GRAPHICS_BIT); graphics_buffer -> queue_family_index++) {
-        if(graphics_buffer -> queue_family_index == queue_family_num) {
+    vkGetPhysicalDeviceQueueFamilyProperties(graphics_ptr -> physical_device, &queue_family_num, queue_family_properties);
+    for(graphics_ptr -> queue_family_index = 0;
+        !(queue_family_properties[graphics_ptr -> queue_family_index].queueFlags | VK_QUEUE_GRAPHICS_BIT); graphics_ptr -> queue_family_index++) {
+        if(graphics_ptr -> queue_family_index == queue_family_num) {
             perror("ERR: Can't find graphics queue!!");
             error_code = EXIT_FAILURE;
             goto destroy_instance;
@@ -221,7 +221,7 @@ int create_graphics_state(struct graphics_state *graphics_buffer) {
 
     const char* const device_extension[1] = {"VK_KHR_swapchain"};
     handle_error(vkCreateDevice(
-        graphics_buffer -> physical_device,
+        graphics_ptr -> physical_device,
         &(VkDeviceCreateInfo) {
             .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
             .pNext = NULL,
@@ -231,7 +231,7 @@ int create_graphics_state(struct graphics_state *graphics_buffer) {
                 .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
                 .pNext = NULL,
                 .flags = 0x0,
-                .queueFamilyIndex = graphics_buffer -> queue_family_index,
+                .queueFamilyIndex = graphics_ptr -> queue_family_index,
                 .queueCount = 1,
                 .pQueuePriorities = ((const float[1]){1.0})
             },
@@ -242,132 +242,132 @@ int create_graphics_state(struct graphics_state *graphics_buffer) {
             .pEnabledFeatures = NULL
         },
         NULL,
-        &graphics_buffer -> device
+        &graphics_ptr -> device
     ), destroy_instance);
     printf("%s", "Device created\n");
 
-    graphics_buffer -> monitor = glfwGetPrimaryMonitor();
+    graphics_ptr -> monitor = glfwGetPrimaryMonitor();
     //FIXME: give this a fallback
-    if(!graphics_buffer -> monitor) {
+    if(!graphics_ptr -> monitor) {
         perror("ERR: The program cannot find your primary monitor");
         error_code = -1;
         goto destory_device;
     }
 
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-    graphics_buffer -> window = glfwCreateWindow(1000, 1000, "Hello Window", NULL, NULL);
-    if(graphics_buffer -> window == NULL) {
+    graphics_ptr -> window = glfwCreateWindow(1000, 1000, "Hello Window", NULL, NULL);
+    if(graphics_ptr -> window == NULL) {
         perror("ERR: no window...");
         error_code = -1;
         goto destroy_window;
     }
 
-    graphics_buffer -> surface;
+    graphics_ptr -> surface;
     handle_error(glfwCreateWindowSurface(
-        graphics_buffer -> instance,
-        graphics_buffer -> window,
+        graphics_ptr -> instance,
+        graphics_ptr -> window,
         NULL,
-        &graphics_buffer -> surface
+        &graphics_ptr -> surface
     ), destroy_window);
     printf("%s", "Surface created\n");
 
     int width, height;
-    glfwGetFramebufferSize(graphics_buffer -> window, &width, &height);
-    graphics_buffer -> image_extent = (VkExtent2D) {
+    glfwGetFramebufferSize(graphics_ptr -> window, &width, &height);
+    graphics_ptr -> image_extent = (VkExtent2D) {
         .width = width,
         .height = height
     };
 
-    vkGetPhysicalDeviceSurfaceCapabilitiesKHR(graphics_buffer -> physical_device, graphics_buffer -> surface, &graphics_buffer -> surface_capabilities);
+    vkGetPhysicalDeviceSurfaceCapabilitiesKHR(graphics_ptr -> physical_device, graphics_ptr -> surface, &graphics_ptr -> surface_capabilities);
 
     uint32_t surface_format_count;
-    vkGetPhysicalDeviceSurfaceFormatsKHR(graphics_buffer -> physical_device, graphics_buffer -> surface, &surface_format_count, NULL);
+    vkGetPhysicalDeviceSurfaceFormatsKHR(graphics_ptr -> physical_device, graphics_ptr -> surface, &surface_format_count, NULL);
     VkSurfaceFormatKHR *surface_format_array = malloc(sizeof(VkSurfaceFormatKHR) * surface_format_count);
-    vkGetPhysicalDeviceSurfaceFormatsKHR(graphics_buffer -> physical_device, graphics_buffer -> surface, &surface_format_count, surface_format_array);
-    graphics_buffer -> surface_format = surface_format_array[0];
+    vkGetPhysicalDeviceSurfaceFormatsKHR(graphics_ptr -> physical_device, graphics_ptr -> surface, &surface_format_count, surface_format_array);
+    graphics_ptr -> surface_format = surface_format_array[0];
 
     for(int i = 0; i < surface_format_count; i++) {
         VkSurfaceFormatKHR available_surface_format = surface_format_array[i];
         if(available_surface_format.format == VK_FORMAT_B8G8R8A8_SRGB && available_surface_format.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
-            graphics_buffer -> surface_format = available_surface_format;
+            graphics_ptr -> surface_format = available_surface_format;
             break;
         }
     }
 
     uint32_t present_mode_count;
-    vkGetPhysicalDeviceSurfacePresentModesKHR(graphics_buffer -> physical_device, graphics_buffer -> surface, &present_mode_count, NULL);
+    vkGetPhysicalDeviceSurfacePresentModesKHR(graphics_ptr -> physical_device, graphics_ptr -> surface, &present_mode_count, NULL);
     VkPresentModeKHR *present_mode_array = malloc(sizeof(VkPresentModeKHR) * present_mode_count);
-    vkGetPhysicalDeviceSurfacePresentModesKHR(graphics_buffer -> physical_device, graphics_buffer -> surface, &present_mode_count, present_mode_array);
-    graphics_buffer -> present_mode = present_mode_array[0];
+    vkGetPhysicalDeviceSurfacePresentModesKHR(graphics_ptr -> physical_device, graphics_ptr -> surface, &present_mode_count, present_mode_array);
+    graphics_ptr -> present_mode = present_mode_array[0];
 
     for(int i = 0; i < present_mode_count; i++) {
         VkPresentModeKHR available_present_mode = present_mode_array[i];
         if(available_present_mode == VK_PRESENT_MODE_MAILBOX_KHR) {
-            graphics_buffer -> present_mode = available_present_mode;
+            graphics_ptr -> present_mode = available_present_mode;
             break;
         }
     }
 
-    graphics_buffer -> swapchain_image_len = graphics_buffer -> surface_capabilities.minImageCount;
+    graphics_ptr -> swapchain_image_len = graphics_ptr -> surface_capabilities.minImageCount;
     handle_error(vkCreateSwapchainKHR(
-        graphics_buffer -> device,
+        graphics_ptr -> device,
         &(VkSwapchainCreateInfoKHR) {
             .sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
             .pNext = NULL,
             .flags = 0x0,
-            .surface = graphics_buffer -> surface,
-            .minImageCount = graphics_buffer -> swapchain_image_len,
-            .imageFormat = graphics_buffer -> surface_format.format,
-            .imageColorSpace = graphics_buffer -> surface_format.colorSpace,
-            .imageExtent = graphics_buffer -> image_extent,
+            .surface = graphics_ptr -> surface,
+            .minImageCount = graphics_ptr -> swapchain_image_len,
+            .imageFormat = graphics_ptr -> surface_format.format,
+            .imageColorSpace = graphics_ptr -> surface_format.colorSpace,
+            .imageExtent = graphics_ptr -> image_extent,
             .imageArrayLayers = 1,
             .imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
             .imageSharingMode = VK_SHARING_MODE_EXCLUSIVE,
             .queueFamilyIndexCount = 0,
             .pQueueFamilyIndices = NULL,
-            .preTransform = graphics_buffer -> surface_capabilities.currentTransform,
+            .preTransform = graphics_ptr -> surface_capabilities.currentTransform,
             .compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
-            .presentMode = graphics_buffer -> present_mode,
+            .presentMode = graphics_ptr -> present_mode,
             .clipped = VK_TRUE,
             .oldSwapchain = VK_NULL_HANDLE
         },
         NULL,
-        &graphics_buffer -> swapchain
+        &graphics_ptr -> swapchain
     ), destroy_surface);
     printf("%s", "Swapchain created\n");
 
-    vkGetDeviceQueue(graphics_buffer -> device, graphics_buffer -> queue_family_index, 0, &graphics_buffer -> queue);
+    vkGetDeviceQueue(graphics_ptr -> device, graphics_ptr -> queue_family_index, 0, &graphics_ptr -> queue);
     printf("%s", "Queue created\n");
 
     handle_error(vkCreateCommandPool(
-        graphics_buffer -> device,
+        graphics_ptr -> device,
         &(VkCommandPoolCreateInfo) {
             .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
             .pNext = NULL,
             .flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
-            .queueFamilyIndex = graphics_buffer -> queue_family_index
+            .queueFamilyIndex = graphics_ptr -> queue_family_index
         },
         NULL,
-        &graphics_buffer -> command_pool
+        &graphics_ptr -> command_pool
     ), destory_swapchain);
     printf("%s", "Command pool created\n");
 
     handle_error(vkAllocateCommandBuffers(
-        graphics_buffer -> device,
+        graphics_ptr -> device,
         &(VkCommandBufferAllocateInfo) {
             .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
             .pNext = NULL,
-            .commandPool = graphics_buffer -> command_pool,
+            .commandPool = graphics_ptr -> command_pool,
             .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
             .commandBufferCount = 1
         },
-        &graphics_buffer -> command_buffer
+        &graphics_ptr -> command_buffer
     ), destroy_command_pool);
     printf("%s", "Command buffer allocated\n");
 
     VkAttachmentDescription attachment_description = (VkAttachmentDescription) {
         .flags = 0x0,
-        .format = graphics_buffer -> surface_format.format,
+        .format = graphics_ptr -> surface_format.format,
         .samples = VK_SAMPLE_COUNT_1_BIT,
         .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
         .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
@@ -376,8 +376,8 @@ int create_graphics_state(struct graphics_state *graphics_buffer) {
         .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
         .finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR
     };
-    VkAttachmentDescription *attachment_description_array = malloc(sizeof(VkAttachmentDescription) * graphics_buffer -> swapchain_image_len);
-    for(int i = 0; i < graphics_buffer -> swapchain_image_len; i++) {
+    VkAttachmentDescription *attachment_description_array = malloc(sizeof(VkAttachmentDescription) * graphics_ptr -> swapchain_image_len);
+    for(int i = 0; i < graphics_ptr -> swapchain_image_len; i++) {
         attachment_description_array[i] = attachment_description;
     }
 
@@ -414,7 +414,7 @@ int create_graphics_state(struct graphics_state *graphics_buffer) {
     VkSubpassDependency subpass_dependency_array[1] = {subpass_dependency};
 
     handle_error(vkCreateRenderPass(
-        graphics_buffer -> device,
+        graphics_ptr -> device,
         &(VkRenderPassCreateInfo) {
             .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
             .pNext = NULL,
@@ -427,7 +427,7 @@ int create_graphics_state(struct graphics_state *graphics_buffer) {
             .pDependencies = subpass_dependency_array
         },
         NULL,
-        &graphics_buffer -> render_pass
+        &graphics_ptr -> render_pass
     ), free_command_buffers);
     printf("%s", "Render pass created\n");
 
@@ -436,21 +436,21 @@ int create_graphics_state(struct graphics_state *graphics_buffer) {
         .height = height,
         .depth = 1
     };
-    graphics_buffer -> swapchain_image_array = malloc(sizeof(VkImage) * graphics_buffer -> swapchain_image_len);
-    vkGetSwapchainImagesKHR(graphics_buffer -> device, graphics_buffer -> swapchain, &graphics_buffer -> swapchain_image_len, graphics_buffer -> swapchain_image_array);
+    graphics_ptr -> swapchain_image_array = malloc(sizeof(VkImage) * graphics_ptr -> swapchain_image_len);
+    vkGetSwapchainImagesKHR(graphics_ptr -> device, graphics_ptr -> swapchain, &graphics_ptr -> swapchain_image_len, graphics_ptr -> swapchain_image_array);
 
-    graphics_buffer -> swapchain_image_view_array = malloc(sizeof(VkImageView) * graphics_buffer -> swapchain_image_len);
-    for(graphics_buffer -> swapchain_image_view_len = 0; graphics_buffer -> swapchain_image_view_len < graphics_buffer -> swapchain_image_len; graphics_buffer -> swapchain_image_view_len++) {
+    graphics_ptr -> swapchain_image_view_array = malloc(sizeof(VkImageView) * graphics_ptr -> swapchain_image_len);
+    for(graphics_ptr -> swapchain_image_view_len = 0; graphics_ptr -> swapchain_image_view_len < graphics_ptr -> swapchain_image_len; graphics_ptr -> swapchain_image_view_len++) {
         VkImageView image_view;
         handle_error(vkCreateImageView(
-            graphics_buffer -> device,
+            graphics_ptr -> device,
             &(VkImageViewCreateInfo) {
                 .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
                 .pNext = NULL,
                 .flags = 0x0,
-                .image = graphics_buffer -> swapchain_image_array[graphics_buffer -> swapchain_image_view_len],
+                .image = graphics_ptr -> swapchain_image_array[graphics_ptr -> swapchain_image_view_len],
                 .viewType = VK_IMAGE_VIEW_TYPE_2D,
-                .format = graphics_buffer -> surface_format.format,
+                .format = graphics_ptr -> surface_format.format,
                 .components = (VkComponentMapping) {
                     .r = VK_COMPONENT_SWIZZLE_R,
                     .g = VK_COMPONENT_SWIZZLE_G,
@@ -468,21 +468,21 @@ int create_graphics_state(struct graphics_state *graphics_buffer) {
             NULL,
             &image_view
         ), destroy_render_pass);
-        graphics_buffer -> swapchain_image_view_array[graphics_buffer -> swapchain_image_view_len] = image_view;
+        graphics_ptr -> swapchain_image_view_array[graphics_ptr -> swapchain_image_view_len] = image_view;
     }
 
-    graphics_buffer -> framebuffer_array = malloc(sizeof(VkFramebuffer) * graphics_buffer -> swapchain_image_len);
-    for (graphics_buffer -> framebuffer_len = 0; graphics_buffer -> framebuffer_len < graphics_buffer -> swapchain_image_len; graphics_buffer -> framebuffer_len++) {
+    graphics_ptr -> framebuffer_array = malloc(sizeof(VkFramebuffer) * graphics_ptr -> swapchain_image_len);
+    for (graphics_ptr -> framebuffer_len = 0; graphics_ptr -> framebuffer_len < graphics_ptr -> swapchain_image_len; graphics_ptr -> framebuffer_len++) {
         VkFramebuffer framebuffer;
         handle_error(vkCreateFramebuffer(
-            graphics_buffer -> device,
+            graphics_ptr -> device,
             &(VkFramebufferCreateInfo) {
                 .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
                 .pNext = NULL,
                 .flags = 0x0,
-                .renderPass = graphics_buffer -> render_pass,
+                .renderPass = graphics_ptr -> render_pass,
                 .attachmentCount = 1,
-                .pAttachments = &graphics_buffer -> swapchain_image_view_array[graphics_buffer -> framebuffer_len],
+                .pAttachments = &graphics_ptr -> swapchain_image_view_array[graphics_ptr -> framebuffer_len],
                 .width = width,
                 .height = height, 
                 .layers = 1
@@ -490,7 +490,7 @@ int create_graphics_state(struct graphics_state *graphics_buffer) {
             NULL,
             &framebuffer
         ), destroy_image_views);
-        graphics_buffer -> framebuffer_array[graphics_buffer -> framebuffer_len] = framebuffer;
+        graphics_ptr -> framebuffer_array[graphics_ptr -> framebuffer_len] = framebuffer;
     }
     printf("%s", "Frame buffers created\n");
 
@@ -544,7 +544,7 @@ int create_graphics_state(struct graphics_state *graphics_buffer) {
     fclose(f_vertex);
 
     handle_error(vkCreateShaderModule(
-        graphics_buffer -> device,
+        graphics_ptr -> device,
         &(VkShaderModuleCreateInfo) {
             .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
             .pNext = NULL,
@@ -553,7 +553,7 @@ int create_graphics_state(struct graphics_state *graphics_buffer) {
             .pCode = vertex_shader_code
         },
         NULL,
-        &graphics_buffer -> vertex_shader_module
+        &graphics_ptr -> vertex_shader_module
     ), destroy_frame_buffers);
     FILE *f_fragment = fopen("shaders/frag.spv", "rb");
     if(f_fragment == NULL) {
@@ -568,7 +568,7 @@ int create_graphics_state(struct graphics_state *graphics_buffer) {
     fclose(f_fragment);
 
     handle_error(vkCreateShaderModule(
-        graphics_buffer -> device,
+        graphics_ptr -> device,
         &(VkShaderModuleCreateInfo) {
             .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
             .pNext = NULL,
@@ -577,7 +577,7 @@ int create_graphics_state(struct graphics_state *graphics_buffer) {
             .pCode = fragment_shader_code
         },
         NULL,
-        &graphics_buffer -> fragment_shader_module
+        &graphics_ptr -> fragment_shader_module
     ), destroy_vertex_shader_module);
 
     VkPipelineShaderStageCreateInfo vertex_shader_stage = (VkPipelineShaderStageCreateInfo) {
@@ -585,7 +585,7 @@ int create_graphics_state(struct graphics_state *graphics_buffer) {
         .pNext = NULL,
         .flags = 0x0,
         .stage = VK_SHADER_STAGE_VERTEX_BIT,
-        .module = graphics_buffer -> vertex_shader_module,
+        .module = graphics_ptr -> vertex_shader_module,
         .pName = "main",
         .pSpecializationInfo = NULL
     };
@@ -595,7 +595,7 @@ int create_graphics_state(struct graphics_state *graphics_buffer) {
         .pNext = NULL,
         .flags = 0x0,
         .stage = VK_SHADER_STAGE_FRAGMENT_BIT,
-        .module = graphics_buffer -> fragment_shader_module,
+        .module = graphics_ptr -> fragment_shader_module,
         .pName = "main",
         .pSpecializationInfo = NULL
     };
@@ -613,7 +613,7 @@ int create_graphics_state(struct graphics_state *graphics_buffer) {
     };
     VkRect2D scissor = (VkRect2D) {
         .offset = {0, 0},
-        .extent = graphics_buffer -> image_extent
+        .extent = graphics_ptr -> image_extent
     };
 
     VkPipelineColorBlendAttachmentState color_blend_attachment = (VkPipelineColorBlendAttachmentState) {
@@ -629,7 +629,7 @@ int create_graphics_state(struct graphics_state *graphics_buffer) {
     VkPipelineColorBlendAttachmentState color_blend_attachment_array[1] = {color_blend_attachment};
 
     handle_error(vkCreatePipelineLayout(
-        graphics_buffer -> device,
+        graphics_ptr -> device,
         &(VkPipelineLayoutCreateInfo) {
             .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
             .pNext = NULL,
@@ -640,11 +640,11 @@ int create_graphics_state(struct graphics_state *graphics_buffer) {
             .pPushConstantRanges = NULL,
         },
         NULL,
-        &graphics_buffer -> pipeline_layout
+        &graphics_ptr -> pipeline_layout
     ), destroy_fragment_shader_module);
 
     handle_error(vkCreateGraphicsPipelines( // The big one
-        graphics_buffer -> device,
+        graphics_ptr -> device,
         VK_NULL_HANDLE,
         1,
         &(VkGraphicsPipelineCreateInfo) {
@@ -723,23 +723,23 @@ int create_graphics_state(struct graphics_state *graphics_buffer) {
                 .dynamicStateCount = 0,
                 .pDynamicStates = NULL
             },
-            .layout = graphics_buffer -> pipeline_layout,
-            .renderPass = graphics_buffer -> render_pass,
+            .layout = graphics_ptr -> pipeline_layout,
+            .renderPass = graphics_ptr -> render_pass,
             .subpass = 0,
             .basePipelineHandle = VK_NULL_HANDLE,
             .basePipelineIndex = -1
         },
         NULL,
-        &graphics_buffer -> pipeline
+        &graphics_ptr -> pipeline
     ), destroy_pipeline_layout);
 
     printf("%s", "Pipeline created\n");
 
-    graphics_buffer -> swapchain_image_available_semaphore_array = malloc(sizeof(VkSemaphore) * graphics_buffer -> swapchain_image_len);
-    for (graphics_buffer -> swapchain_image_available_semaphore_len = 0; graphics_buffer -> swapchain_image_available_semaphore_len < graphics_buffer -> swapchain_image_len; graphics_buffer -> swapchain_image_available_semaphore_len++) {
+    graphics_ptr -> swapchain_image_available_semaphore_array = malloc(sizeof(VkSemaphore) * graphics_ptr -> swapchain_image_len);
+    for (graphics_ptr -> swapchain_image_available_semaphore_len = 0; graphics_ptr -> swapchain_image_available_semaphore_len < graphics_ptr -> swapchain_image_len; graphics_ptr -> swapchain_image_available_semaphore_len++) {
         VkSemaphore image_available_semaphore;
         handle_error(vkCreateSemaphore(
-            graphics_buffer -> device,
+            graphics_ptr -> device,
             &(VkSemaphoreCreateInfo) {
                 .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
                 .pNext = NULL,
@@ -748,14 +748,14 @@ int create_graphics_state(struct graphics_state *graphics_buffer) {
             NULL,
             &image_available_semaphore
         ), destroy_pipeline);
-        graphics_buffer -> swapchain_image_available_semaphore_array[graphics_buffer -> swapchain_image_available_semaphore_len] = image_available_semaphore;
+        graphics_ptr -> swapchain_image_available_semaphore_array[graphics_ptr -> swapchain_image_available_semaphore_len] = image_available_semaphore;
     }
 
-    graphics_buffer -> swapchain_render_finished_semaphore_array = malloc(sizeof(VkSemaphore) * graphics_buffer -> swapchain_image_len);
-    for (graphics_buffer -> swapchain_render_finished_semaphore_len = 0; graphics_buffer -> swapchain_render_finished_semaphore_len < graphics_buffer -> swapchain_image_len; graphics_buffer -> swapchain_render_finished_semaphore_len++) {
+    graphics_ptr -> swapchain_render_finished_semaphore_array = malloc(sizeof(VkSemaphore) * graphics_ptr -> swapchain_image_len);
+    for (graphics_ptr -> swapchain_render_finished_semaphore_len = 0; graphics_ptr -> swapchain_render_finished_semaphore_len < graphics_ptr -> swapchain_image_len; graphics_ptr -> swapchain_render_finished_semaphore_len++) {
         VkSemaphore render_finished_semaphore;
         handle_error(vkCreateSemaphore(
-            graphics_buffer -> device,
+            graphics_ptr -> device,
             &(VkSemaphoreCreateInfo) {
                 .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
                 .pNext = NULL,
@@ -764,14 +764,14 @@ int create_graphics_state(struct graphics_state *graphics_buffer) {
             NULL,
             &render_finished_semaphore
         ), destroy_image_semaphores);
-        graphics_buffer -> swapchain_render_finished_semaphore_array[graphics_buffer -> swapchain_render_finished_semaphore_len] = render_finished_semaphore;
+        graphics_ptr -> swapchain_render_finished_semaphore_array[graphics_ptr -> swapchain_render_finished_semaphore_len] = render_finished_semaphore;
     }
 
-    graphics_buffer -> swapchain_in_flight_fence_array = malloc(sizeof(VkFence) * graphics_buffer -> swapchain_image_len);
-    for (graphics_buffer -> swapchain_in_flight_fence_len = 0; graphics_buffer -> swapchain_in_flight_fence_len < graphics_buffer -> swapchain_image_len; graphics_buffer -> swapchain_in_flight_fence_len++) {
+    graphics_ptr -> swapchain_in_flight_fence_array = malloc(sizeof(VkFence) * graphics_ptr -> swapchain_image_len);
+    for (graphics_ptr -> swapchain_in_flight_fence_len = 0; graphics_ptr -> swapchain_in_flight_fence_len < graphics_ptr -> swapchain_image_len; graphics_ptr -> swapchain_in_flight_fence_len++) {
         VkFence in_flight_fence;
         handle_error(vkCreateFence(
-            graphics_buffer -> device,
+            graphics_ptr -> device,
             &(VkFenceCreateInfo) {
                 .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
                 .pNext = NULL,
@@ -780,94 +780,94 @@ int create_graphics_state(struct graphics_state *graphics_buffer) {
             NULL,
             &in_flight_fence
         ), destroy_render_semaphores);
-        graphics_buffer -> swapchain_in_flight_fence_array[graphics_buffer -> swapchain_in_flight_fence_len] = in_flight_fence;
+        graphics_ptr -> swapchain_in_flight_fence_array[graphics_ptr -> swapchain_in_flight_fence_len] = in_flight_fence;
     }
     printf("%s", "Sync objects created\n");
 
     return error_code;
 
 destroy_flight_fences:
-    for(int i = 0; i < graphics_buffer -> swapchain_in_flight_fence_len; i++) {
-        vkDestroyFence(graphics_buffer -> device, graphics_buffer -> swapchain_in_flight_fence_array[i], NULL);
+    for(int i = 0; i < graphics_ptr -> swapchain_in_flight_fence_len; i++) {
+        vkDestroyFence(graphics_ptr -> device, graphics_ptr -> swapchain_in_flight_fence_array[i], NULL);
     }
 destroy_render_semaphores:
-    for(int i = 0; i < graphics_buffer -> swapchain_in_flight_fence_len; i++) {
-        vkDestroySemaphore(graphics_buffer -> device, graphics_buffer -> swapchain_render_finished_semaphore_array[i], NULL);
+    for(int i = 0; i < graphics_ptr -> swapchain_in_flight_fence_len; i++) {
+        vkDestroySemaphore(graphics_ptr -> device, graphics_ptr -> swapchain_render_finished_semaphore_array[i], NULL);
     }
 destroy_image_semaphores:
-    for(int i = 0; i < graphics_buffer -> swapchain_in_flight_fence_len; i++) {
-        vkDestroySemaphore(graphics_buffer -> device, graphics_buffer -> swapchain_image_available_semaphore_array[i], NULL);
+    for(int i = 0; i < graphics_ptr -> swapchain_in_flight_fence_len; i++) {
+        vkDestroySemaphore(graphics_ptr -> device, graphics_ptr -> swapchain_image_available_semaphore_array[i], NULL);
     }
 destroy_pipeline:
-    vkDestroyPipeline(graphics_buffer -> device, graphics_buffer -> pipeline, NULL);
+    vkDestroyPipeline(graphics_ptr -> device, graphics_ptr -> pipeline, NULL);
 destroy_pipeline_layout:
-    vkDestroyPipelineLayout(graphics_buffer -> device, graphics_buffer -> pipeline_layout, NULL);
+    vkDestroyPipelineLayout(graphics_ptr -> device, graphics_ptr -> pipeline_layout, NULL);
 destroy_fragment_shader_module:
-    vkDestroyShaderModule(graphics_buffer -> device, graphics_buffer -> fragment_shader_module, NULL);
+    vkDestroyShaderModule(graphics_ptr -> device, graphics_ptr -> fragment_shader_module, NULL);
 destroy_vertex_shader_module:
-    vkDestroyShaderModule(graphics_buffer -> device, graphics_buffer -> vertex_shader_module, NULL);
+    vkDestroyShaderModule(graphics_ptr -> device, graphics_ptr -> vertex_shader_module, NULL);
 destroy_frame_buffers:
-    for (int i = 0; i < graphics_buffer -> framebuffer_len; i++) {
-        vkDestroyFramebuffer(graphics_buffer -> device, graphics_buffer -> framebuffer_array[i], NULL);
+    for (int i = 0; i < graphics_ptr -> framebuffer_len; i++) {
+        vkDestroyFramebuffer(graphics_ptr -> device, graphics_ptr -> framebuffer_array[i], NULL);
     }
 destroy_image_views:
-    for(int i = 0; i < graphics_buffer -> swapchain_image_view_len; i++) {
-        VkImageView image_view = graphics_buffer -> swapchain_image_view_array[i];
-        vkDestroyImageView(graphics_buffer -> device, image_view, NULL);
+    for(int i = 0; i < graphics_ptr -> swapchain_image_view_len; i++) {
+        VkImageView image_view = graphics_ptr -> swapchain_image_view_array[i];
+        vkDestroyImageView(graphics_ptr -> device, image_view, NULL);
     }
 destroy_render_pass:
-    vkDestroyRenderPass(graphics_buffer -> device, graphics_buffer -> render_pass, NULL);
+    vkDestroyRenderPass(graphics_ptr -> device, graphics_ptr -> render_pass, NULL);
 free_command_buffers:
-    vkFreeCommandBuffers(graphics_buffer -> device, graphics_buffer -> command_pool, 1, &graphics_buffer -> command_buffer);
+    vkFreeCommandBuffers(graphics_ptr -> device, graphics_ptr -> command_pool, 1, &graphics_ptr -> command_buffer);
 destroy_command_pool:
-    vkDestroyCommandPool(graphics_buffer -> device, graphics_buffer -> command_pool, NULL);
+    vkDestroyCommandPool(graphics_ptr -> device, graphics_ptr -> command_pool, NULL);
 destory_swapchain:
-    vkDestroySwapchainKHR(graphics_buffer -> device, graphics_buffer -> swapchain, NULL);
+    vkDestroySwapchainKHR(graphics_ptr -> device, graphics_ptr -> swapchain, NULL);
 destroy_surface:
-    vkDestroySurfaceKHR(graphics_buffer -> instance, graphics_buffer -> surface, NULL);
+    vkDestroySurfaceKHR(graphics_ptr -> instance, graphics_ptr -> surface, NULL);
 destroy_window:
-    glfwDestroyWindow(graphics_buffer -> window);
+    glfwDestroyWindow(graphics_ptr -> window);
 destory_device:
-    vkDestroyDevice(graphics_buffer -> device, NULL);
+    vkDestroyDevice(graphics_ptr -> device, NULL);
 destroy_instance:
-    vkDestroyInstance(graphics_buffer -> instance, NULL);
+    vkDestroyInstance(graphics_ptr -> instance, NULL);
 exit_GLFW:
     glfwTerminate();
     return error_code;
 }
 
-void cleanup(struct graphics_state *graphics_buffer) {
-    for(int i = 0; i < graphics_buffer -> swapchain_in_flight_fence_len; i++) {
-        vkDestroyFence(graphics_buffer -> device, graphics_buffer -> swapchain_in_flight_fence_array[i], NULL);
+void cleanup(struct graphics_state *graphics_ptr) {
+    for(int i = 0; i < graphics_ptr -> swapchain_in_flight_fence_len; i++) {
+        vkDestroyFence(graphics_ptr -> device, graphics_ptr -> swapchain_in_flight_fence_array[i], NULL);
     }
-    for(int i = 0; i < graphics_buffer -> swapchain_in_flight_fence_len; i++) {
-        vkDestroySemaphore(graphics_buffer -> device, graphics_buffer -> swapchain_render_finished_semaphore_array[i], NULL);
+    for(int i = 0; i < graphics_ptr -> swapchain_in_flight_fence_len; i++) {
+        vkDestroySemaphore(graphics_ptr -> device, graphics_ptr -> swapchain_render_finished_semaphore_array[i], NULL);
     }
-    for(int i = 0; i < graphics_buffer -> swapchain_in_flight_fence_len; i++) {
-        vkDestroySemaphore(graphics_buffer -> device, graphics_buffer -> swapchain_image_available_semaphore_array[i], NULL);
+    for(int i = 0; i < graphics_ptr -> swapchain_in_flight_fence_len; i++) {
+        vkDestroySemaphore(graphics_ptr -> device, graphics_ptr -> swapchain_image_available_semaphore_array[i], NULL);
     }
-    vkDestroyPipeline(graphics_buffer -> device, graphics_buffer -> pipeline, NULL);
-    vkDestroyPipelineLayout(graphics_buffer -> device, graphics_buffer -> pipeline_layout, NULL);
-    vkDestroyShaderModule(graphics_buffer -> device, graphics_buffer -> fragment_shader_module, NULL);
-    vkDestroyShaderModule(graphics_buffer -> device, graphics_buffer -> vertex_shader_module, NULL);
-    for (int i = 0; i < graphics_buffer -> buffer_len; i++) {
-        vkFreeMemory(graphics_buffer -> device, graphics_buffer -> buffer_array[i].memory, NULL);
-        vkDestroyBuffer(graphics_buffer -> device, graphics_buffer -> buffer_array[i].buffer, NULL);
+    vkDestroyPipeline(graphics_ptr -> device, graphics_ptr -> pipeline, NULL);
+    vkDestroyPipelineLayout(graphics_ptr -> device, graphics_ptr -> pipeline_layout, NULL);
+    vkDestroyShaderModule(graphics_ptr -> device, graphics_ptr -> fragment_shader_module, NULL);
+    vkDestroyShaderModule(graphics_ptr -> device, graphics_ptr -> vertex_shader_module, NULL);
+    for (int i = 0; i < graphics_ptr -> buffer_len; i++) {
+        vkFreeMemory(graphics_ptr -> device, graphics_ptr -> buffer_array[i].memory, NULL);
+        vkDestroyBuffer(graphics_ptr -> device, graphics_ptr -> buffer_array[i].buffer, NULL);
     }
     
-    for (int i = 0; i < graphics_buffer -> framebuffer_len; i++) {
-        vkDestroyFramebuffer(graphics_buffer -> device, graphics_buffer -> framebuffer_array[i], NULL);
+    for (int i = 0; i < graphics_ptr -> framebuffer_len; i++) {
+        vkDestroyFramebuffer(graphics_ptr -> device, graphics_ptr -> framebuffer_array[i], NULL);
     }
-    for(int i = 0; i < graphics_buffer -> swapchain_image_view_len; i++) {
-        vkDestroyImageView(graphics_buffer -> device, graphics_buffer -> swapchain_image_view_array[i], NULL);
+    for(int i = 0; i < graphics_ptr -> swapchain_image_view_len; i++) {
+        vkDestroyImageView(graphics_ptr -> device, graphics_ptr -> swapchain_image_view_array[i], NULL);
     }
-    vkDestroyRenderPass(graphics_buffer -> device, graphics_buffer -> render_pass, NULL);
-    vkFreeCommandBuffers(graphics_buffer -> device, graphics_buffer -> command_pool, 1, &graphics_buffer -> command_buffer);
-    vkDestroyCommandPool(graphics_buffer -> device, graphics_buffer -> command_pool, NULL);
-    vkDestroySwapchainKHR(graphics_buffer -> device, graphics_buffer -> swapchain, NULL);
-    vkDestroySurfaceKHR(graphics_buffer -> instance, graphics_buffer -> surface, NULL);
-    glfwDestroyWindow(graphics_buffer -> window);
-    vkDestroyDevice(graphics_buffer -> device, NULL);
-    vkDestroyInstance(graphics_buffer -> instance, NULL);
+    vkDestroyRenderPass(graphics_ptr -> device, graphics_ptr -> render_pass, NULL);
+    vkFreeCommandBuffers(graphics_ptr -> device, graphics_ptr -> command_pool, 1, &graphics_ptr -> command_buffer);
+    vkDestroyCommandPool(graphics_ptr -> device, graphics_ptr -> command_pool, NULL);
+    vkDestroySwapchainKHR(graphics_ptr -> device, graphics_ptr -> swapchain, NULL);
+    vkDestroySurfaceKHR(graphics_ptr -> instance, graphics_ptr -> surface, NULL);
+    glfwDestroyWindow(graphics_ptr -> window);
+    vkDestroyDevice(graphics_ptr -> device, NULL);
+    vkDestroyInstance(graphics_ptr -> instance, NULL);
     glfwTerminate();
 }
