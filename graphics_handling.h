@@ -1,0 +1,849 @@
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <time.h>
+#include <math.h>
+#include <vulkan/vulkan.h>
+#include <GLFW/glfw3.h>
+#include <vulkan/vulkan_core.h>
+#include "error_handling.h"
+
+void error_handle_glfw(int e, const char* msg) {
+    fprintf(stderr, "GLFW ERR: %d, MSG: %s", e, msg);
+}
+
+struct graphics_state {
+    VkResult last_error;
+    const char** extension_array;
+    uint32_t extension_num;
+    VkInstance instance;
+    VkPhysicalDevice* physical_device_array;
+    uint32_t physical_device_len;
+    VkPhysicalDevice physical_device;
+    int queue_family_index;
+    VkDevice device;
+    GLFWmonitor* monitor;
+    GLFWwindow* window;
+    VkSurfaceKHR surface;
+    VkExtent2D image_extent;
+    VkSurfaceCapabilitiesKHR surface_capabilities;
+    VkSurfaceFormatKHR surface_format;
+    VkPresentModeKHR present_mode;
+    VkSwapchainKHR swapchain;
+    VkQueue queue;
+    VkCommandPool command_pool;
+    VkCommandBuffer command_buffer;
+    VkRenderPass render_pass;
+    VkImage* swapchain_image_array;
+    uint32_t swapchain_image_len;
+    VkImageView* swapchain_image_view_array;
+    uint32_t swapchain_image_view_len;
+    VkSemaphore* swapchain_image_available_semaphore_array;
+    uint32_t swapchain_image_available_semaphore_len;
+    VkSemaphore* swapchain_render_finished_semaphore_array;
+    uint32_t swapchain_render_finished_semaphore_len;
+    VkFence* swapchain_in_flight_fence_array;
+    uint32_t swapchain_in_flight_fence_len;
+    VkFramebuffer* framebuffer_array;
+    uint32_t framebuffer_len;
+    VkBuffer vertex_buffer;
+    VkMemoryRequirements vertex_memory_requirements;
+    VkPhysicalDeviceMemoryProperties vertex_memory_properties;
+    VkDeviceMemory vertex_memory;
+    VkShaderModule vertex_shader_module;
+    VkShaderModule fragment_shader_module;
+    VkPipelineLayout pipeline_layout;
+    VkPipeline pipeline;
+};
+
+int create_graphics_state(struct graphics_state *graphics_ptr) {
+    int error_code = EXIT_SUCCESS;
+    VkResult vk_result;
+
+    glfwInit();
+    glfwSetErrorCallback(&error_handle_glfw);
+    if(!glfwVulkanSupported()) {
+        perror("ERR: GLFW+Vulkan not supported");
+        error_code = EXIT_FAILURE;
+        goto exit_GLFW;
+    }
+
+    uint32_t version = 0;
+    vkEnumerateInstanceVersion(&version);
+    if(version < VK_VERSION_1_3) {
+        perror("ERR: Vulkan 1.3 or above required");
+        error_code = EXIT_FAILURE;
+        goto exit_GLFW;
+    }
+
+    {
+        const char** glfw_extensions = glfwGetRequiredInstanceExtensions(&graphics_ptr -> extension_num);
+        graphics_ptr -> extension_array = malloc(sizeof(char*) * graphics_ptr -> extension_num + 0);
+        for(int i = 0; i < graphics_ptr -> extension_num; i++) {
+            graphics_ptr -> extension_array[i] = glfw_extensions[i];
+        }
+        //extensions[instance_extension_count] = "VK_KHR_swapchain";
+        printf("%s", "Loading extensions\n");
+        for(int i = 0; i < graphics_ptr -> extension_num; i++) {
+            printf("%s\n", graphics_ptr -> extension_array[i]);
+        }
+    }
+    printf("%s", "GLFW initialized\n");
+    
+    uint32_t layer_count = 1;
+    const char* layers[1] = {"VK_LAYER_KHRONOS_validation"};
+    handle_error(vkCreateInstance(
+        &(VkInstanceCreateInfo) {
+            .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
+            .pNext = NULL,
+            .flags = 0x0,
+            .pApplicationInfo = &(VkApplicationInfo) {
+                .sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
+                .pNext = NULL,
+                .pApplicationName = "UntitledFactoryGame",
+                .applicationVersion = 0,
+                .pEngineName = "Tuntomite",
+                .engineVersion = 0,
+                .apiVersion = VK_API_VERSION_1_3
+            },
+            .enabledLayerCount = layer_count,
+            .ppEnabledLayerNames = layers,
+            .enabledExtensionCount = graphics_ptr -> extension_num,
+            .ppEnabledExtensionNames = graphics_ptr -> extension_array
+        }, 
+        NULL, 
+        &graphics_ptr -> instance
+    ), exit_GLFW);
+    printf("%s", "Instance created\n");
+
+    {
+        // order of priority is descrete, integrated, virtual, cpu, other
+        int type_to_prio[5] = { 4, 1, 0, 2, 3 };
+        handle_error(vkEnumeratePhysicalDevices(graphics_ptr -> instance, &graphics_ptr -> physical_device_len, NULL), destroy_instance);
+        graphics_ptr -> physical_device_array = malloc(sizeof(VkPhysicalDevice)*graphics_ptr -> physical_device_len);
+        handle_error(vkEnumeratePhysicalDevices(graphics_ptr -> instance, &graphics_ptr -> physical_device_len, graphics_ptr -> physical_device_array), destroy_instance);
+        int best_i = 0;
+        int best_prio = 5;
+        for(int i = 0; i < graphics_ptr -> physical_device_len; i++) {
+            VkPhysicalDeviceProperties properties;
+            vkGetPhysicalDeviceProperties(graphics_ptr -> physical_device_array[i], &properties);
+            if(type_to_prio[properties.deviceType] < best_prio) {
+                best_i = i;
+                best_prio = type_to_prio[properties.deviceType];
+                if(best_prio == 0) {
+                    break;
+                }
+            }
+        }
+        graphics_ptr -> physical_device = graphics_ptr -> physical_device_array[best_i];
+        free(graphics_ptr -> physical_device_array);
+    }
+
+    uint32_t queue_family_num;
+    vkGetPhysicalDeviceQueueFamilyProperties(graphics_ptr -> physical_device, &queue_family_num, NULL);
+    VkQueueFamilyProperties* queue_family_properties = malloc(sizeof(VkQueueFamilyProperties)*queue_family_num);
+    vkGetPhysicalDeviceQueueFamilyProperties(graphics_ptr -> physical_device, &queue_family_num, queue_family_properties);
+    for(graphics_ptr -> queue_family_index = 0;
+        !(queue_family_properties[graphics_ptr -> queue_family_index].queueFlags | VK_QUEUE_GRAPHICS_BIT); graphics_ptr -> queue_family_index++) {
+        if(graphics_ptr -> queue_family_index == queue_family_num) {
+            perror("ERR: Can't find graphics queue!!");
+            error_code = EXIT_FAILURE;
+            goto destroy_instance;
+        }
+    }
+
+    const char* const device_extension[1] = {"VK_KHR_swapchain"};
+    handle_error(vkCreateDevice(
+        graphics_ptr -> physical_device,
+        &(VkDeviceCreateInfo) {
+            .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
+            .pNext = NULL,
+            .flags = 0x0,
+            .queueCreateInfoCount = 1,
+            .pQueueCreateInfos = &(VkDeviceQueueCreateInfo) {
+                .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
+                .pNext = NULL,
+                .flags = 0x0,
+                .queueFamilyIndex = graphics_ptr -> queue_family_index,
+                .queueCount = 1,
+                .pQueuePriorities = ((const float[1]){1.0})
+            },
+            .enabledLayerCount = 0,
+            .ppEnabledLayerNames = NULL,
+            .enabledExtensionCount = 1,
+            .ppEnabledExtensionNames = device_extension,
+            .pEnabledFeatures = NULL
+        },
+        NULL,
+        &graphics_ptr -> device
+    ), destroy_instance);
+    printf("%s", "Device created\n");
+
+    graphics_ptr -> monitor = glfwGetPrimaryMonitor();
+    //FIXME: give this a fallback
+    if(!graphics_ptr -> monitor) {
+        perror("ERR: The program cannot find your primary monitor");
+        error_code = -1;
+        goto destory_device;
+    }
+
+    glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+    graphics_ptr -> window = glfwCreateWindow(1000, 1000, "Hello Window", NULL, NULL);
+    if(graphics_ptr -> window == NULL) {
+        perror("ERR: no window...");
+        error_code = -1;
+        goto destroy_window;
+    }
+
+    graphics_ptr -> surface;
+    handle_error(glfwCreateWindowSurface(
+        graphics_ptr -> instance,
+        graphics_ptr -> window,
+        NULL,
+        &graphics_ptr -> surface
+    ), destroy_window);
+    printf("%s", "Surface created\n");
+
+    int width, height;
+    glfwGetFramebufferSize(graphics_ptr -> window, &width, &height);
+    graphics_ptr -> image_extent = (VkExtent2D) {
+        .width = width,
+        .height = height
+    };
+
+    vkGetPhysicalDeviceSurfaceCapabilitiesKHR(graphics_ptr -> physical_device, graphics_ptr -> surface, &graphics_ptr -> surface_capabilities);
+
+    uint32_t surface_format_count;
+    vkGetPhysicalDeviceSurfaceFormatsKHR(graphics_ptr -> physical_device, graphics_ptr -> surface, &surface_format_count, NULL);
+    VkSurfaceFormatKHR *surface_format_array = malloc(sizeof(VkSurfaceFormatKHR) * surface_format_count);
+    vkGetPhysicalDeviceSurfaceFormatsKHR(graphics_ptr -> physical_device, graphics_ptr -> surface, &surface_format_count, surface_format_array);
+    graphics_ptr -> surface_format = surface_format_array[0];
+
+    for(int i = 0; i < surface_format_count; i++) {
+        VkSurfaceFormatKHR available_surface_format = surface_format_array[i];
+        if(available_surface_format.format == VK_FORMAT_B8G8R8A8_SRGB && available_surface_format.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
+            graphics_ptr -> surface_format = available_surface_format;
+            break;
+        }
+    }
+
+    uint32_t present_mode_count;
+    vkGetPhysicalDeviceSurfacePresentModesKHR(graphics_ptr -> physical_device, graphics_ptr -> surface, &present_mode_count, NULL);
+    VkPresentModeKHR *present_mode_array = malloc(sizeof(VkPresentModeKHR) * present_mode_count);
+    vkGetPhysicalDeviceSurfacePresentModesKHR(graphics_ptr -> physical_device, graphics_ptr -> surface, &present_mode_count, present_mode_array);
+    graphics_ptr -> present_mode = present_mode_array[0];
+
+    for(int i = 0; i < present_mode_count; i++) {
+        VkPresentModeKHR available_present_mode = present_mode_array[i];
+        if(available_present_mode == VK_PRESENT_MODE_MAILBOX_KHR) {
+            graphics_ptr -> present_mode = available_present_mode;
+            break;
+        }
+    }
+
+    graphics_ptr -> swapchain_image_len = graphics_ptr -> surface_capabilities.minImageCount;
+    handle_error(vkCreateSwapchainKHR(
+        graphics_ptr -> device,
+        &(VkSwapchainCreateInfoKHR) {
+            .sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
+            .pNext = NULL,
+            .flags = 0x0,
+            .surface = graphics_ptr -> surface,
+            .minImageCount = graphics_ptr -> swapchain_image_len,
+            .imageFormat = graphics_ptr -> surface_format.format,
+            .imageColorSpace = graphics_ptr -> surface_format.colorSpace,
+            .imageExtent = graphics_ptr -> image_extent,
+            .imageArrayLayers = 1,
+            .imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+            .imageSharingMode = VK_SHARING_MODE_EXCLUSIVE,
+            .queueFamilyIndexCount = 0,
+            .pQueueFamilyIndices = NULL,
+            .preTransform = graphics_ptr -> surface_capabilities.currentTransform,
+            .compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
+            .presentMode = graphics_ptr -> present_mode,
+            .clipped = VK_TRUE,
+            .oldSwapchain = VK_NULL_HANDLE
+        },
+        NULL,
+        &graphics_ptr -> swapchain
+    ), destroy_surface);
+    printf("%s", "Swapchain created\n");
+
+    vkGetDeviceQueue(graphics_ptr -> device, graphics_ptr -> queue_family_index, 0, &graphics_ptr -> queue);
+    printf("%s", "Queue created\n");
+
+    handle_error(vkCreateCommandPool(
+        graphics_ptr -> device,
+        &(VkCommandPoolCreateInfo) {
+            .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+            .pNext = NULL,
+            .flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
+            .queueFamilyIndex = graphics_ptr -> queue_family_index
+        },
+        NULL,
+        &graphics_ptr -> command_pool
+    ), destory_swapchain);
+    printf("%s", "Command pool created\n");
+
+    handle_error(vkAllocateCommandBuffers(
+        graphics_ptr -> device,
+        &(VkCommandBufferAllocateInfo) {
+            .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+            .pNext = NULL,
+            .commandPool = graphics_ptr -> command_pool,
+            .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+            .commandBufferCount = 1
+        },
+        &graphics_ptr -> command_buffer
+    ), destroy_command_pool);
+    printf("%s", "Command buffer allocated\n");
+
+    VkAttachmentDescription attachment_description = (VkAttachmentDescription) {
+        .flags = 0x0,
+        .format = graphics_ptr -> surface_format.format,
+        .samples = VK_SAMPLE_COUNT_1_BIT,
+        .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+        .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+        .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+        .finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR
+    };
+    VkAttachmentDescription *attachment_description_array = malloc(sizeof(VkAttachmentDescription) * graphics_ptr -> swapchain_image_len);
+    for(int i = 0; i < graphics_ptr -> swapchain_image_len; i++) {
+        attachment_description_array[i] = attachment_description;
+    }
+
+    VkAttachmentReference attachment_reference = (VkAttachmentReference) {
+        .attachment = 0,
+        .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
+    };
+    VkAttachmentReference attachment_reference_array[1] = {attachment_reference};
+
+    VkSubpassDescription subpass_description = (VkSubpassDescription) {
+        .flags = 0x0,
+        .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
+        .inputAttachmentCount = 0,
+        .pInputAttachments = NULL,
+        .colorAttachmentCount = 1,
+        .pColorAttachments = attachment_reference_array,
+        .pResolveAttachments = NULL,
+        .pDepthStencilAttachment = NULL,
+        .preserveAttachmentCount = 0,
+        .pPreserveAttachments = NULL
+
+    };
+    VkSubpassDescription subpass_description_array[1] = {subpass_description};
+
+    VkSubpassDependency subpass_dependency = (VkSubpassDependency) {
+        .srcSubpass = VK_SUBPASS_EXTERNAL,
+        .dstSubpass = 0,
+        .srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+        .dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+        .srcAccessMask = 0x0,
+        .dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+        .dependencyFlags = 0x0
+    };
+    VkSubpassDependency subpass_dependency_array[1] = {subpass_dependency};
+
+    handle_error(vkCreateRenderPass(
+        graphics_ptr -> device,
+        &(VkRenderPassCreateInfo) {
+            .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
+            .pNext = NULL,
+            .flags = 0x0,
+            .attachmentCount = 1,
+            .pAttachments = attachment_description_array,
+            .subpassCount = 1,
+            .pSubpasses = subpass_description_array,
+            .dependencyCount = 1,
+            .pDependencies = subpass_dependency_array
+        },
+        NULL,
+        &graphics_ptr -> render_pass
+    ), free_command_buffers);
+    printf("%s", "Render pass created\n");
+
+    VkExtent3D extent = (VkExtent3D) {
+        .width = width,
+        .height = height,
+        .depth = 1
+    };
+    graphics_ptr -> swapchain_image_array = malloc(sizeof(VkImage) * graphics_ptr -> swapchain_image_len);
+    vkGetSwapchainImagesKHR(graphics_ptr -> device, graphics_ptr -> swapchain, &graphics_ptr -> swapchain_image_len, graphics_ptr -> swapchain_image_array);
+
+    graphics_ptr -> swapchain_image_view_array = malloc(sizeof(VkImageView) * graphics_ptr -> swapchain_image_len);
+    for(graphics_ptr -> swapchain_image_view_len = 0; graphics_ptr -> swapchain_image_view_len < graphics_ptr -> swapchain_image_len; graphics_ptr -> swapchain_image_view_len++) {
+        VkImageView image_view;
+        handle_error(vkCreateImageView(
+            graphics_ptr -> device,
+            &(VkImageViewCreateInfo) {
+                .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+                .pNext = NULL,
+                .flags = 0x0,
+                .image = graphics_ptr -> swapchain_image_array[graphics_ptr -> swapchain_image_view_len],
+                .viewType = VK_IMAGE_VIEW_TYPE_2D,
+                .format = graphics_ptr -> surface_format.format,
+                .components = (VkComponentMapping) {
+                    .r = VK_COMPONENT_SWIZZLE_R,
+                    .g = VK_COMPONENT_SWIZZLE_G,
+                    .b = VK_COMPONENT_SWIZZLE_B,
+                    .a = VK_COMPONENT_SWIZZLE_A,
+                },
+                .subresourceRange = (VkImageSubresourceRange) {
+                    .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                    .baseMipLevel = 0,
+                    .levelCount = 1,
+                    .baseArrayLayer = 0,
+                    .layerCount = 1
+                }
+            },
+            NULL,
+            &image_view
+        ), destroy_render_pass);
+        graphics_ptr -> swapchain_image_view_array[graphics_ptr -> swapchain_image_view_len] = image_view;
+    }
+
+    graphics_ptr -> framebuffer_array = malloc(sizeof(VkFramebuffer) * graphics_ptr -> swapchain_image_len);
+    for (graphics_ptr -> framebuffer_len = 0; graphics_ptr -> framebuffer_len < graphics_ptr -> swapchain_image_len; graphics_ptr -> framebuffer_len++) {
+        VkFramebuffer framebuffer;
+        handle_error(vkCreateFramebuffer(
+            graphics_ptr -> device,
+            &(VkFramebufferCreateInfo) {
+                .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
+                .pNext = NULL,
+                .flags = 0x0,
+                .renderPass = graphics_ptr -> render_pass,
+                .attachmentCount = 1,
+                .pAttachments = &graphics_ptr -> swapchain_image_view_array[graphics_ptr -> framebuffer_len],
+                .width = width,
+                .height = height, 
+                .layers = 1
+            },
+            NULL,
+            &framebuffer
+        ), destroy_image_views);
+        graphics_ptr -> framebuffer_array[graphics_ptr -> framebuffer_len] = framebuffer;
+    }
+    printf("%s", "Frame buffers created\n");
+
+    FILE *f_model = fopen("cube.obj", "r");
+
+    int vertex_count = 36;
+    int vertex_dim = 4;
+    int vertex_color = 3;
+    int vertex_size = vertex_dim + vertex_color;
+    //float vertex_1[4] = {0.0f, -0.5f, 0.0f, 1.0f};
+    //float vertex_2[4] = {0.5f, 0.5f, 0.0f, 1.0f};
+    //float vertex_3[4] = {-0.5f, 0.5f, 0.0f, 1.0f};
+    //float *model_data[3] = {vertex_1, vertex_2, vertex_3};
+    //float vertices[12] = {
+    //    0.0f, -0.5f, 0.0f, 1.0f,
+    //    0.5f, 0.5f, 0.0f, 1.0f,
+    //    -0.5f, 0.5f, 0.0f, 1.0f };
+
+    VkVertexInputBindingDescription vertex_binding_description = (VkVertexInputBindingDescription) {
+        .binding = 0,
+        .stride = sizeof(float) * vertex_size,
+        .inputRate = VK_VERTEX_INPUT_RATE_VERTEX
+    };
+
+    VkVertexInputAttributeDescription vertex_attribute_description_position = (VkVertexInputAttributeDescription) {
+        .location = 0,
+        .format = VK_FORMAT_R32G32B32A32_SFLOAT,
+        .binding = 0,
+        .offset = 0
+    };
+
+    VkVertexInputAttributeDescription vertex_attribute_description_color = (VkVertexInputAttributeDescription) {
+        .location = 1,
+        .format = VK_FORMAT_R32G32B32_SFLOAT,
+        .binding = 0,
+        .offset = sizeof(float) * vertex_dim
+    };
+
+    VkVertexInputAttributeDescription vertex_attribute_description_array[2] = {vertex_attribute_description_position, vertex_attribute_description_color};
+
+    handle_error(vkCreateBuffer(
+        graphics_ptr -> device,
+        &(VkBufferCreateInfo) {
+            .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+            .pNext = NULL,
+            .flags = 0x0,
+            .size = sizeof(float) * vertex_size * vertex_count,
+            .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+            .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+            .queueFamilyIndexCount = 0,
+            .pQueueFamilyIndices = NULL
+        },
+        NULL,
+        &graphics_ptr -> vertex_buffer
+    ), destroy_frame_buffers);
+
+    vkGetBufferMemoryRequirements(graphics_ptr -> device, graphics_ptr -> vertex_buffer, &graphics_ptr -> vertex_memory_requirements);
+    vkGetPhysicalDeviceMemoryProperties(graphics_ptr -> physical_device, &graphics_ptr -> vertex_memory_properties);
+
+    int memory_index;
+    for (int i = 0; graphics_ptr -> vertex_memory_properties.memoryTypeCount; i++) {
+        if ((graphics_ptr -> vertex_memory_requirements.memoryTypeBits & (1 << i)) && (graphics_ptr -> vertex_memory_properties.memoryTypes[i].propertyFlags & (VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)) == (VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)) {
+            memory_index = i;
+            break;
+        }
+    }
+
+    handle_error(vkAllocateMemory(
+        graphics_ptr -> device,
+        &(VkMemoryAllocateInfo) {
+            .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+            .pNext = NULL,
+            .allocationSize = graphics_ptr -> vertex_memory_requirements.size,
+            .memoryTypeIndex = memory_index
+        },
+        NULL,
+        &graphics_ptr -> vertex_memory
+    ), destroy_vertex_buffer);
+
+    vkBindBufferMemory(graphics_ptr -> device, graphics_ptr -> vertex_buffer, graphics_ptr -> vertex_memory, 0);
+
+    FILE *f_vertex = fopen("shaders/vert.spv", "rb");
+    if(f_vertex == NULL) {
+        perror("failed to open file");
+        goto free_vertex_memory;
+    }
+    fseek(f_vertex, 0, SEEK_END);
+    long fsize_vertex = ftell(f_vertex);
+    fseek(f_vertex, 0, SEEK_SET);
+    uint32_t *vertex_shader_code = malloc(sizeof(uint32_t) * fsize_vertex);
+    fread(vertex_shader_code, sizeof(uint32_t), fsize_vertex, f_vertex);
+    fclose(f_vertex);
+
+    handle_error(vkCreateShaderModule(
+        graphics_ptr -> device,
+        &(VkShaderModuleCreateInfo) {
+            .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+            .pNext = NULL,
+            .flags = 0x0,
+            .codeSize = fsize_vertex,
+            .pCode = vertex_shader_code
+        },
+        NULL,
+        &graphics_ptr -> vertex_shader_module
+    ), free_vertex_memory);
+    FILE *f_fragment = fopen("shaders/frag.spv", "rb");
+    if(f_fragment == NULL) {
+        perror("failed to open file");
+        goto destroy_vertex_shader_module;
+    }
+    fseek(f_fragment, 0, SEEK_END);
+    long fsize_fragment = ftell(f_fragment);
+    fseek(f_fragment, 0, SEEK_SET);
+    uint32_t *fragment_shader_code = malloc(sizeof(uint32_t) * fsize_fragment);
+    fread(fragment_shader_code, sizeof(uint32_t), fsize_fragment, f_fragment);
+    fclose(f_fragment);
+
+    handle_error(vkCreateShaderModule(
+        graphics_ptr -> device,
+        &(VkShaderModuleCreateInfo) {
+            .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+            .pNext = NULL,
+            .flags = 0x0,
+            .codeSize = fsize_fragment,
+            .pCode = fragment_shader_code
+        },
+        NULL,
+        &graphics_ptr -> fragment_shader_module
+    ), destroy_vertex_shader_module);
+
+    VkPipelineShaderStageCreateInfo vertex_shader_stage = (VkPipelineShaderStageCreateInfo) {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+        .pNext = NULL,
+        .flags = 0x0,
+        .stage = VK_SHADER_STAGE_VERTEX_BIT,
+        .module = graphics_ptr -> vertex_shader_module,
+        .pName = "main",
+        .pSpecializationInfo = NULL
+    };
+
+    VkPipelineShaderStageCreateInfo fragment_shader_stage = (VkPipelineShaderStageCreateInfo) {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+        .pNext = NULL,
+        .flags = 0x0,
+        .stage = VK_SHADER_STAGE_FRAGMENT_BIT,
+        .module = graphics_ptr -> fragment_shader_module,
+        .pName = "main",
+        .pSpecializationInfo = NULL
+    };
+
+    VkPipelineShaderStageCreateInfo shader_stage_array[2] = {vertex_shader_stage, fragment_shader_stage};
+    printf("%s", "Shaders created\n");
+
+    VkViewport viewport = (VkViewport) {
+        .x = 0.0f,
+        .y = 0.0f,
+        .width = width,
+        .height = height,
+        .minDepth = 0.0f,
+        .maxDepth = 1.0f
+    };
+    VkRect2D scissor = (VkRect2D) {
+        .offset = {0, 0},
+        .extent = graphics_ptr -> image_extent
+    };
+
+    VkPipelineColorBlendAttachmentState color_blend_attachment = (VkPipelineColorBlendAttachmentState) {
+        .blendEnable = VK_FALSE,
+        .srcColorBlendFactor = VK_BLEND_FACTOR_ONE,
+        .dstColorBlendFactor = VK_BLEND_FACTOR_ZERO,
+        .colorBlendOp = VK_BLEND_OP_ADD,
+        .srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE,
+        .dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO,
+        .alphaBlendOp = VK_BLEND_OP_ADD,
+        .colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT
+    };
+    VkPipelineColorBlendAttachmentState color_blend_attachment_array[1] = {color_blend_attachment};
+
+    handle_error(vkCreatePipelineLayout(
+        graphics_ptr -> device,
+        &(VkPipelineLayoutCreateInfo) {
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+            .pNext = NULL,
+            .flags = 0x0,
+            .setLayoutCount = 0,
+            .pSetLayouts = NULL,
+            .pushConstantRangeCount = 0,
+            .pPushConstantRanges = NULL,
+        },
+        NULL,
+        &graphics_ptr -> pipeline_layout
+    ), destroy_fragment_shader_module);
+
+    handle_error(vkCreateGraphicsPipelines( // The big one
+        graphics_ptr -> device,
+        VK_NULL_HANDLE,
+        1,
+        &(VkGraphicsPipelineCreateInfo) {
+            .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
+            .pNext = NULL,
+            .flags = 0x0,
+            .stageCount = 2,
+            .pStages = shader_stage_array,
+            .pVertexInputState = &(VkPipelineVertexInputStateCreateInfo) {
+                .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
+                .pNext = NULL,
+                .flags = 0x0,
+                .vertexBindingDescriptionCount = 1,
+                .pVertexBindingDescriptions = &vertex_binding_description,
+                .vertexAttributeDescriptionCount = 2,
+                .pVertexAttributeDescriptions = vertex_attribute_description_array
+            },
+            .pInputAssemblyState = &(VkPipelineInputAssemblyStateCreateInfo) {
+                .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
+                .pNext = NULL,
+                .flags = 0x0,
+                .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+                .primitiveRestartEnable = VK_FALSE
+            },
+            .pTessellationState = VK_NULL_HANDLE,
+            .pViewportState = &(VkPipelineViewportStateCreateInfo) {
+                .sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
+                .pNext = NULL,
+                .flags = 0x0,
+                .viewportCount = 1,
+                .pViewports = &viewport,
+                .scissorCount = 1,
+                .pScissors = &scissor
+            },
+            .pRasterizationState = &(VkPipelineRasterizationStateCreateInfo) {
+                .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
+                .pNext = NULL,
+                .flags = 0x0,
+                .depthClampEnable = VK_FALSE,
+                .rasterizerDiscardEnable = VK_FALSE,
+                .polygonMode = VK_POLYGON_MODE_FILL,
+                .cullMode = VK_CULL_MODE_BACK_BIT,
+                .frontFace = VK_FRONT_FACE_CLOCKWISE,
+                .depthBiasEnable = VK_FALSE,
+                .depthBiasConstantFactor = 0.0f,
+                .depthBiasClamp = 0.0f,
+                .depthBiasSlopeFactor = 0.0f,
+                .lineWidth = 1.0f
+            },
+            .pMultisampleState = &(VkPipelineMultisampleStateCreateInfo) {
+                .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
+                .pNext = NULL,
+                .flags = 0x0,
+                .rasterizationSamples = VK_SAMPLE_COUNT_1_BIT,
+                .sampleShadingEnable = VK_FALSE,
+                .minSampleShading = 1.0f,
+                .pSampleMask = NULL,
+                .alphaToCoverageEnable = VK_FALSE,
+                .alphaToOneEnable = VK_FALSE
+            },
+            .pDepthStencilState = NULL,
+            .pColorBlendState = &(VkPipelineColorBlendStateCreateInfo) {
+                .sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
+                .pNext = NULL,
+                .flags = 0x0,
+                .logicOpEnable = VK_FALSE,
+                .logicOp = VK_LOGIC_OP_COPY,
+                .attachmentCount = 1,
+                .pAttachments = color_blend_attachment_array,
+                .blendConstants = {0.0f, 0.0f, 0.0f, 0.0f}
+            },
+            .pDynamicState = &(VkPipelineDynamicStateCreateInfo) {
+                .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
+                .pNext = NULL,
+                .flags = 0x0,
+                .dynamicStateCount = 0,
+                .pDynamicStates = NULL
+            },
+            .layout = graphics_ptr -> pipeline_layout,
+            .renderPass = graphics_ptr -> render_pass,
+            .subpass = 0,
+            .basePipelineHandle = VK_NULL_HANDLE,
+            .basePipelineIndex = -1
+        },
+        NULL,
+        &graphics_ptr -> pipeline
+    ), destroy_pipeline_layout);
+
+    printf("%s", "Pipeline created\n");
+
+    graphics_ptr -> swapchain_image_available_semaphore_array = malloc(sizeof(VkSemaphore) * graphics_ptr -> swapchain_image_len);
+    for (graphics_ptr -> swapchain_image_available_semaphore_len = 0; graphics_ptr -> swapchain_image_available_semaphore_len < graphics_ptr -> swapchain_image_len; graphics_ptr -> swapchain_image_available_semaphore_len++) {
+        VkSemaphore image_available_semaphore;
+        handle_error(vkCreateSemaphore(
+            graphics_ptr -> device,
+            &(VkSemaphoreCreateInfo) {
+                .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+                .pNext = NULL,
+                .flags = 0x0
+            },
+            NULL,
+            &image_available_semaphore
+        ), destroy_pipeline);
+        graphics_ptr -> swapchain_image_available_semaphore_array[graphics_ptr -> swapchain_image_available_semaphore_len] = image_available_semaphore;
+    }
+
+    graphics_ptr -> swapchain_render_finished_semaphore_array = malloc(sizeof(VkSemaphore) * graphics_ptr -> swapchain_image_len);
+    for (graphics_ptr -> swapchain_render_finished_semaphore_len = 0; graphics_ptr -> swapchain_render_finished_semaphore_len < graphics_ptr -> swapchain_image_len; graphics_ptr -> swapchain_render_finished_semaphore_len++) {
+        VkSemaphore render_finished_semaphore;
+        handle_error(vkCreateSemaphore(
+            graphics_ptr -> device,
+            &(VkSemaphoreCreateInfo) {
+                .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+                .pNext = NULL,
+                .flags = 0x0
+            },
+            NULL,
+            &render_finished_semaphore
+        ), destroy_image_semaphores);
+        graphics_ptr -> swapchain_render_finished_semaphore_array[graphics_ptr -> swapchain_render_finished_semaphore_len] = render_finished_semaphore;
+    }
+
+    graphics_ptr -> swapchain_in_flight_fence_array = malloc(sizeof(VkFence) * graphics_ptr -> swapchain_image_len);
+    for (graphics_ptr -> swapchain_in_flight_fence_len = 0; graphics_ptr -> swapchain_in_flight_fence_len < graphics_ptr -> swapchain_image_len; graphics_ptr -> swapchain_in_flight_fence_len++) {
+        VkFence in_flight_fence;
+        handle_error(vkCreateFence(
+            graphics_ptr -> device,
+            &(VkFenceCreateInfo) {
+                .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
+                .pNext = NULL,
+                .flags = VK_FENCE_CREATE_SIGNALED_BIT
+            },
+            NULL,
+            &in_flight_fence
+        ), destroy_render_semaphores);
+        graphics_ptr -> swapchain_in_flight_fence_array[graphics_ptr -> swapchain_in_flight_fence_len] = in_flight_fence;
+    }
+    printf("%s", "Sync objects created\n");
+
+    return error_code;
+
+destroy_flight_fences:
+    for(int i = 0; i < graphics_ptr -> swapchain_in_flight_fence_len; i++) {
+        vkDestroyFence(graphics_ptr -> device, graphics_ptr -> swapchain_in_flight_fence_array[i], NULL);
+    }
+destroy_render_semaphores:
+    for(int i = 0; i < graphics_ptr -> swapchain_in_flight_fence_len; i++) {
+        vkDestroySemaphore(graphics_ptr -> device, graphics_ptr -> swapchain_render_finished_semaphore_array[i], NULL);
+    }
+destroy_image_semaphores:
+    for(int i = 0; i < graphics_ptr -> swapchain_in_flight_fence_len; i++) {
+        vkDestroySemaphore(graphics_ptr -> device, graphics_ptr -> swapchain_image_available_semaphore_array[i], NULL);
+    }
+destroy_pipeline:
+    vkDestroyPipeline(graphics_ptr -> device, graphics_ptr -> pipeline, NULL);
+destroy_pipeline_layout:
+    vkDestroyPipelineLayout(graphics_ptr -> device, graphics_ptr -> pipeline_layout, NULL);
+destroy_fragment_shader_module:
+    vkDestroyShaderModule(graphics_ptr -> device, graphics_ptr -> fragment_shader_module, NULL);
+destroy_vertex_shader_module:
+    vkDestroyShaderModule(graphics_ptr -> device, graphics_ptr -> vertex_shader_module, NULL);
+free_vertex_memory:
+    vkFreeMemory(graphics_ptr -> device, graphics_ptr -> vertex_memory, NULL);
+destroy_vertex_buffer:
+    vkDestroyBuffer(graphics_ptr -> device, graphics_ptr -> vertex_buffer, NULL);
+destroy_frame_buffers:
+    for (int i = 0; i < graphics_ptr -> framebuffer_len; i++) {
+        vkDestroyFramebuffer(graphics_ptr -> device, graphics_ptr -> framebuffer_array[i], NULL);
+    }
+destroy_image_views:
+    for(int i = 0; i < graphics_ptr -> swapchain_image_view_len; i++) {
+        VkImageView image_view = graphics_ptr -> swapchain_image_view_array[i];
+        vkDestroyImageView(graphics_ptr -> device, image_view, NULL);
+    }
+destroy_render_pass:
+    vkDestroyRenderPass(graphics_ptr -> device, graphics_ptr -> render_pass, NULL);
+free_command_buffers:
+    vkFreeCommandBuffers(graphics_ptr -> device, graphics_ptr -> command_pool, 1, &graphics_ptr -> command_buffer);
+destroy_command_pool:
+    vkDestroyCommandPool(graphics_ptr -> device, graphics_ptr -> command_pool, NULL);
+destory_swapchain:
+    vkDestroySwapchainKHR(graphics_ptr -> device, graphics_ptr -> swapchain, NULL);
+destroy_surface:
+    vkDestroySurfaceKHR(graphics_ptr -> instance, graphics_ptr -> surface, NULL);
+destroy_window:
+    glfwDestroyWindow(graphics_ptr -> window);
+destory_device:
+    vkDestroyDevice(graphics_ptr -> device, NULL);
+destroy_instance:
+    vkDestroyInstance(graphics_ptr -> instance, NULL);
+exit_GLFW:
+    glfwTerminate();
+    return error_code;
+}
+
+void cleanup(struct graphics_state *graphics_ptr) {
+    for(int i = 0; i < graphics_ptr -> swapchain_in_flight_fence_len; i++) {
+        vkDestroyFence(graphics_ptr -> device, graphics_ptr -> swapchain_in_flight_fence_array[i], NULL);
+    }
+    for(int i = 0; i < graphics_ptr -> swapchain_in_flight_fence_len; i++) {
+        vkDestroySemaphore(graphics_ptr -> device, graphics_ptr -> swapchain_render_finished_semaphore_array[i], NULL);
+    }
+    for(int i = 0; i < graphics_ptr -> swapchain_in_flight_fence_len; i++) {
+        vkDestroySemaphore(graphics_ptr -> device, graphics_ptr -> swapchain_image_available_semaphore_array[i], NULL);
+    }
+    vkDestroyPipeline(graphics_ptr -> device, graphics_ptr -> pipeline, NULL);
+    vkDestroyPipelineLayout(graphics_ptr -> device, graphics_ptr -> pipeline_layout, NULL);
+    vkDestroyShaderModule(graphics_ptr -> device, graphics_ptr -> fragment_shader_module, NULL);
+    vkDestroyShaderModule(graphics_ptr -> device, graphics_ptr -> vertex_shader_module, NULL);
+    vkFreeMemory(graphics_ptr -> device, graphics_ptr -> vertex_memory, NULL);
+    vkDestroyBuffer(graphics_ptr -> device, graphics_ptr -> vertex_buffer, NULL);
+    for (int i = 0; i < graphics_ptr -> framebuffer_len; i++) {
+        vkDestroyFramebuffer(graphics_ptr -> device, graphics_ptr -> framebuffer_array[i], NULL);
+    }
+    for(int i = 0; i < graphics_ptr -> swapchain_image_view_len; i++) {
+        vkDestroyImageView(graphics_ptr -> device, graphics_ptr -> swapchain_image_view_array[i], NULL);
+    }
+    vkDestroyRenderPass(graphics_ptr -> device, graphics_ptr -> render_pass, NULL);
+    vkFreeCommandBuffers(graphics_ptr -> device, graphics_ptr -> command_pool, 1, &graphics_ptr -> command_buffer);
+    vkDestroyCommandPool(graphics_ptr -> device, graphics_ptr -> command_pool, NULL);
+    vkDestroySwapchainKHR(graphics_ptr -> device, graphics_ptr -> swapchain, NULL);
+    vkDestroySurfaceKHR(graphics_ptr -> instance, graphics_ptr -> surface, NULL);
+    glfwDestroyWindow(graphics_ptr -> window);
+    vkDestroyDevice(graphics_ptr -> device, NULL);
+    vkDestroyInstance(graphics_ptr -> instance, NULL);
+    glfwTerminate();
+}
