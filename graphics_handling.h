@@ -911,6 +911,7 @@ int create_graphics_state(struct graphics_state *graphics_state) {
     }
     printf("%s", "Sync objects created\n");
 
+    graphics_state -> buffer_array = malloc(sizeof(struct graphics_buffer) * 64);
     graphics_state -> buffer_len = 0;
 
     return error_code;
@@ -970,6 +971,7 @@ exit_GLFW:
 }
 
 void cleanup(struct graphics_state *graphics_state) {
+    vkDeviceWaitIdle(graphics_state -> device);
     for(int i = 0; i < graphics_state -> swapchain_in_flight_fence_len; i++) {
         vkDestroyFence(graphics_state -> device, graphics_state -> swapchain_in_flight_fence_array[i], NULL);
     }

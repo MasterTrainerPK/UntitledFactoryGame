@@ -122,18 +122,19 @@ int main() {
         }
         const double alpha = (double)accumulator / dt;
         //lerp state and render state;
-        printf("%s", "Beginning new frame\n");
+        //printf("%s", "Beginning new frame\n");
 
         vkWaitForFences(graphics.device, 1, &graphics.swapchain_in_flight_fence_array[current_frame], VK_TRUE, UINT64_MAX);
-        vkResetFences(graphics.device, 1, &graphics.swapchain_in_flight_fence_array[current_frame]);
         vkResetCommandBuffer(graphics.command_buffer, 0x0);
 
         uint32_t image_index;
-        VkResult swapchain_error = vkAcquireNextImageKHR(graphics.device, graphics.swapchain, UINT64_MAX, graphics.swapchain_image_available_semaphore_array[current_frame], VK_NULL_HANDLE, &image_index);
+        VkResult swapchain_error = vkAcquireNextImageKHR(graphics.device, graphics.swapchain, UINT64_MAX - 1, graphics.swapchain_image_available_semaphore_array[current_frame], VK_NULL_HANDLE, &image_index);
         if (swapchain_error == VK_ERROR_OUT_OF_DATE_KHR) {
             recreate_swapchain(&graphics);
+            continue;
         }
-        printf("%s", "Image acquired\n");
+        //printf("%s", "Image acquired\n");
+        vkResetFences(graphics.device, 1, &graphics.swapchain_in_flight_fence_array[current_frame]);
 
         float camera_position[3] = {0.0f, 0.0f, 1.5f};
 
@@ -227,7 +228,7 @@ int main() {
             },
             VK_SUBPASS_CONTENTS_INLINE
         );
-        printf("%s", "Command buffer and render pass have begun\n");
+        //printf("%s", "Command buffer and render pass have begun\n");
 
         vkCmdBindPipeline(graphics.command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphics.pipeline);
         VkDeviceSize offsets[1] = {0};
@@ -253,10 +254,10 @@ int main() {
             },
             graphics.swapchain_in_flight_fence_array[current_frame]
         );
-        printf("%s", "Commands submitted\n");
+        //printf("%s", "Commands submitted\n");
         vkWaitForFences(graphics.device, 1, &graphics.swapchain_in_flight_fence_array[current_frame], VK_TRUE, UINT64_MAX);
 
-        vkQueuePresentKHR(
+        swapchain_error = vkQueuePresentKHR(
             graphics.queue,
             &(VkPresentInfoKHR) {
                 .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
@@ -269,7 +270,11 @@ int main() {
                 .pResults = NULL
             }
         );
-        printf("%s", "Image presented\n");
+        if (swapchain_error == VK_ERROR_OUT_OF_DATE_KHR) {
+            recreate_swapchain(&graphics);
+            continue;
+        }
+        //printf("%s", "Image presented\n");
 
         current_frame = (current_frame + 1) % graphics.swapchain_image_len;
 
