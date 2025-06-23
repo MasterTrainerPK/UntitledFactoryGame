@@ -64,6 +64,7 @@ struct graphics_state {
 };
 
 int create_graphics_buffer(struct graphics_state *graphics_state, VkBufferUsageFlagBits usage, unsigned long long size, VkMemoryPropertyFlagBits memory_property_flags, struct graphics_buffer *graphics_buffer) {
+    printf("%s", "Creating graphics buffer\n");
     int error_code = EXIT_SUCCESS;
     VkResult vk_result;
 
@@ -85,6 +86,7 @@ int create_graphics_buffer(struct graphics_state *graphics_state, VkBufferUsageF
         NULL,
         &graphics_buffer -> buffer
     ), exit_function);
+    printf("%s", "Graphics buffer created\n");
 
     VkMemoryRequirements memory_requirements;
     vkGetBufferMemoryRequirements(graphics_state -> device, graphics_buffer -> buffer, &memory_requirements);
@@ -110,15 +112,144 @@ int create_graphics_buffer(struct graphics_state *graphics_state, VkBufferUsageF
         NULL,
         &graphics_buffer -> memory
     ), destroy_buffer);
+    printf("%s", "Graphics buffer allocated\n");
 
-    vkBindBufferMemory(graphics_state -> device, graphics_buffer -> buffer, graphics_buffer -> memory, 0);
+    handle_error(vkBindBufferMemory(graphics_state -> device, graphics_buffer -> buffer, graphics_buffer -> memory, 0), free_buffer_memory);
+    printf("%s", "Graphics buffer bound\n");
+
     graphics_state -> buffer_array[graphics_state -> buffer_len] = *graphics_buffer;
     graphics_state -> buffer_len += 1;
 
     return error_code;
-
+free_buffer_memory:
+    vkFreeMemory(graphics_state -> device, graphics_buffer -> memory, NULL);
 destroy_buffer:
     vkDestroyBuffer(graphics_state -> device, graphics_buffer -> buffer, NULL);
+exit_function:
+    return error_code;
+}
+
+int recreate_swapchain(struct graphics_state *graphics_state) {
+    printf("%s", "Recreating swapchain\n");
+    int error_code = EXIT_SUCCESS;
+    VkResult vk_result;
+
+    handle_error(vkDeviceWaitIdle(graphics_state -> device), exit_function);
+
+    for (int i = 0; i < graphics_state -> framebuffer_len; i++) {
+        vkDestroyFramebuffer(graphics_state -> device, graphics_state -> framebuffer_array[i], NULL);
+    }
+    graphics_state -> framebuffer_len = 0;
+
+    for(int i = 0; i < graphics_state -> swapchain_image_view_len; i++) {
+        vkDestroyImageView(graphics_state -> device,  graphics_state -> swapchain_image_view_array[i], NULL);
+    }
+    graphics_state -> swapchain_image_view_len = 0;
+
+    int width, height;
+    glfwGetFramebufferSize(graphics_state -> window, &width, &height);
+    graphics_state -> image_extent = (VkExtent2D) {
+        .width = width,
+        .height = height
+    };
+    vkGetPhysicalDeviceSurfaceCapabilitiesKHR(graphics_state -> physical_device, graphics_state -> surface, &graphics_state -> surface_capabilities);
+
+    VkSwapchainKHR old_swapchain = graphics_state -> swapchain;
+    handle_error(vkCreateSwapchainKHR(
+        graphics_state -> device,
+        &(VkSwapchainCreateInfoKHR) {
+            .sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
+            .pNext = NULL,
+            .flags = 0x0,
+            .surface = graphics_state -> surface,
+            .minImageCount = graphics_state -> swapchain_image_len,
+            .imageFormat = graphics_state -> surface_format.format,
+            .imageColorSpace = graphics_state -> surface_format.colorSpace,
+            .imageExtent = graphics_state -> image_extent,
+            .imageArrayLayers = 1,
+            .imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+            .imageSharingMode = VK_SHARING_MODE_EXCLUSIVE,
+            .queueFamilyIndexCount = 0,
+            .pQueueFamilyIndices = NULL,
+            .preTransform = graphics_state -> surface_capabilities.currentTransform,
+            .compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
+            .presentMode = graphics_state -> present_mode,
+            .clipped = VK_TRUE,
+            .oldSwapchain = old_swapchain
+        },
+        NULL,
+        &graphics_state -> swapchain
+    ), exit_function);
+    vkDestroySwapchainKHR(graphics_state -> device, old_swapchain, NULL);
+    printf("%s", "Swapchain created\n");
+
+    graphics_state -> swapchain_image_array = malloc(sizeof(VkImage) * graphics_state -> swapchain_image_len);
+    vkGetSwapchainImagesKHR(graphics_state -> device, graphics_state -> swapchain, &graphics_state -> swapchain_image_len, graphics_state -> swapchain_image_array);
+
+    graphics_state -> swapchain_image_view_array = malloc(sizeof(VkImageView) * graphics_state -> swapchain_image_len);
+    for(graphics_state -> swapchain_image_view_len = 0; graphics_state -> swapchain_image_view_len < graphics_state -> swapchain_image_len; graphics_state -> swapchain_image_view_len++) {
+        VkImageView image_view;
+        handle_error(vkCreateImageView(
+            graphics_state -> device,
+            &(VkImageViewCreateInfo) {
+                .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+                .pNext = NULL,
+                .flags = 0x0,
+                .image = graphics_state -> swapchain_image_array[graphics_state -> swapchain_image_view_len],
+                .viewType = VK_IMAGE_VIEW_TYPE_2D,
+                .format = graphics_state -> surface_format.format,
+                .components = (VkComponentMapping) {
+                    .r = VK_COMPONENT_SWIZZLE_R,
+                    .g = VK_COMPONENT_SWIZZLE_G,
+                    .b = VK_COMPONENT_SWIZZLE_B,
+                    .a = VK_COMPONENT_SWIZZLE_A,
+                },
+                .subresourceRange = (VkImageSubresourceRange) {
+                    .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                    .baseMipLevel = 0,
+                    .levelCount = 1,
+                    .baseArrayLayer = 0,
+                    .layerCount = 1
+                }
+            },
+            NULL,
+            &image_view
+        ), destroy_swapchain);
+        graphics_state -> swapchain_image_view_array[graphics_state -> swapchain_image_view_len] = image_view;
+    }
+    printf("%s", "Image views created\n");
+
+    graphics_state -> framebuffer_array = malloc(sizeof(VkFramebuffer) * graphics_state -> swapchain_image_len);
+    for (graphics_state -> framebuffer_len = 0; graphics_state -> framebuffer_len < graphics_state -> swapchain_image_len; graphics_state -> framebuffer_len++) {
+        VkFramebuffer framebuffer;
+        handle_error(vkCreateFramebuffer(
+            graphics_state -> device,
+            &(VkFramebufferCreateInfo) {
+                .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
+                .pNext = NULL,
+                .flags = 0x0,
+                .renderPass = graphics_state -> render_pass,
+                .attachmentCount = 1,
+                .pAttachments = &graphics_state -> swapchain_image_view_array[graphics_state -> framebuffer_len],
+                .width = graphics_state -> image_extent.width,
+                .height = graphics_state -> image_extent.height, 
+                .layers = 1
+            },
+            NULL,
+            &framebuffer
+        ), destroy_image_views);
+        graphics_state -> framebuffer_array[graphics_state -> framebuffer_len] = framebuffer;
+    }
+    printf("%s", "Frame buffers created\n");
+
+    return error_code;
+destroy_image_views:
+    for(int i = 0; i < graphics_state -> swapchain_image_view_len; i++) {
+        VkImageView image_view = graphics_state -> swapchain_image_view_array[i];
+        vkDestroyImageView(graphics_state -> device, image_view, NULL);
+    }
+destroy_swapchain:
+    vkDestroySwapchainKHR(graphics_state -> device, graphics_state -> swapchain, NULL);
 exit_function:
     return error_code;
 }
@@ -336,6 +467,42 @@ int create_graphics_state(struct graphics_state *graphics_state) {
     ), destroy_surface);
     printf("%s", "Swapchain created\n");
 
+    graphics_state -> swapchain_image_array = malloc(sizeof(VkImage) * graphics_state -> swapchain_image_len);
+    vkGetSwapchainImagesKHR(graphics_state -> device, graphics_state -> swapchain, &graphics_state -> swapchain_image_len, graphics_state -> swapchain_image_array);
+
+    graphics_state -> swapchain_image_view_array = malloc(sizeof(VkImageView) * graphics_state -> swapchain_image_len);
+    for(graphics_state -> swapchain_image_view_len = 0; graphics_state -> swapchain_image_view_len < graphics_state -> swapchain_image_len; graphics_state -> swapchain_image_view_len++) {
+        VkImageView image_view;
+        handle_error(vkCreateImageView(
+            graphics_state -> device,
+            &(VkImageViewCreateInfo) {
+                .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+                .pNext = NULL,
+                .flags = 0x0,
+                .image = graphics_state -> swapchain_image_array[graphics_state -> swapchain_image_view_len],
+                .viewType = VK_IMAGE_VIEW_TYPE_2D,
+                .format = graphics_state -> surface_format.format,
+                .components = (VkComponentMapping) {
+                    .r = VK_COMPONENT_SWIZZLE_R,
+                    .g = VK_COMPONENT_SWIZZLE_G,
+                    .b = VK_COMPONENT_SWIZZLE_B,
+                    .a = VK_COMPONENT_SWIZZLE_A,
+                },
+                .subresourceRange = (VkImageSubresourceRange) {
+                    .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                    .baseMipLevel = 0,
+                    .levelCount = 1,
+                    .baseArrayLayer = 0,
+                    .layerCount = 1
+                }
+            },
+            NULL,
+            &image_view
+        ), destroy_image_views);
+        graphics_state -> swapchain_image_view_array[graphics_state -> swapchain_image_view_len] = image_view;
+    }
+    printf("%s", "Image views created\n");
+
     vkGetDeviceQueue(graphics_state -> device, graphics_state -> queue_family_index, 0, &graphics_state -> queue);
     printf("%s", "Queue created\n");
 
@@ -431,46 +598,6 @@ int create_graphics_state(struct graphics_state *graphics_state) {
     ), free_command_buffers);
     printf("%s", "Render pass created\n");
 
-    VkExtent3D extent = (VkExtent3D) {
-        .width = width,
-        .height = height,
-        .depth = 1
-    };
-    graphics_state -> swapchain_image_array = malloc(sizeof(VkImage) * graphics_state -> swapchain_image_len);
-    vkGetSwapchainImagesKHR(graphics_state -> device, graphics_state -> swapchain, &graphics_state -> swapchain_image_len, graphics_state -> swapchain_image_array);
-
-    graphics_state -> swapchain_image_view_array = malloc(sizeof(VkImageView) * graphics_state -> swapchain_image_len);
-    for(graphics_state -> swapchain_image_view_len = 0; graphics_state -> swapchain_image_view_len < graphics_state -> swapchain_image_len; graphics_state -> swapchain_image_view_len++) {
-        VkImageView image_view;
-        handle_error(vkCreateImageView(
-            graphics_state -> device,
-            &(VkImageViewCreateInfo) {
-                .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-                .pNext = NULL,
-                .flags = 0x0,
-                .image = graphics_state -> swapchain_image_array[graphics_state -> swapchain_image_view_len],
-                .viewType = VK_IMAGE_VIEW_TYPE_2D,
-                .format = graphics_state -> surface_format.format,
-                .components = (VkComponentMapping) {
-                    .r = VK_COMPONENT_SWIZZLE_R,
-                    .g = VK_COMPONENT_SWIZZLE_G,
-                    .b = VK_COMPONENT_SWIZZLE_B,
-                    .a = VK_COMPONENT_SWIZZLE_A,
-                },
-                .subresourceRange = (VkImageSubresourceRange) {
-                    .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                    .baseMipLevel = 0,
-                    .levelCount = 1,
-                    .baseArrayLayer = 0,
-                    .layerCount = 1
-                }
-            },
-            NULL,
-            &image_view
-        ), destroy_render_pass);
-        graphics_state -> swapchain_image_view_array[graphics_state -> swapchain_image_view_len] = image_view;
-    }
-
     graphics_state -> framebuffer_array = malloc(sizeof(VkFramebuffer) * graphics_state -> swapchain_image_len);
     for (graphics_state -> framebuffer_len = 0; graphics_state -> framebuffer_len < graphics_state -> swapchain_image_len; graphics_state -> framebuffer_len++) {
         VkFramebuffer framebuffer;
@@ -483,13 +610,13 @@ int create_graphics_state(struct graphics_state *graphics_state) {
                 .renderPass = graphics_state -> render_pass,
                 .attachmentCount = 1,
                 .pAttachments = &graphics_state -> swapchain_image_view_array[graphics_state -> framebuffer_len],
-                .width = width,
-                .height = height, 
+                .width = graphics_state -> image_extent.width,
+                .height = graphics_state -> image_extent.height, 
                 .layers = 1
             },
             NULL,
             &framebuffer
-        ), destroy_image_views);
+        ), destroy_framebuffers);
         graphics_state -> framebuffer_array[graphics_state -> framebuffer_len] = framebuffer;
     }
     printf("%s", "Frame buffers created\n");
@@ -534,7 +661,7 @@ int create_graphics_state(struct graphics_state *graphics_state) {
     FILE *f_vertex = fopen("shaders/vert.spv", "rb");
     if(f_vertex == NULL) {
         perror("failed to open file");
-        goto destroy_frame_buffers;
+        goto destroy_framebuffers;
     }
     fseek(f_vertex, 0, SEEK_END);
     long fsize_vertex = ftell(f_vertex);
@@ -554,7 +681,7 @@ int create_graphics_state(struct graphics_state *graphics_state) {
         },
         NULL,
         &graphics_state -> vertex_shader_module
-    ), destroy_frame_buffers);
+    ), destroy_framebuffers);
     FILE *f_fragment = fopen("shaders/frag.spv", "rb");
     if(f_fragment == NULL) {
         perror("failed to open file");
@@ -784,20 +911,25 @@ int create_graphics_state(struct graphics_state *graphics_state) {
     }
     printf("%s", "Sync objects created\n");
 
+    graphics_state -> buffer_len = 0;
+
     return error_code;
 
 destroy_flight_fences:
     for(int i = 0; i < graphics_state -> swapchain_in_flight_fence_len; i++) {
         vkDestroyFence(graphics_state -> device, graphics_state -> swapchain_in_flight_fence_array[i], NULL);
     }
+    graphics_state -> swapchain_in_flight_fence_len = 0;
 destroy_render_semaphores:
-    for(int i = 0; i < graphics_state -> swapchain_in_flight_fence_len; i++) {
+    for(int i = 0; i < graphics_state -> swapchain_render_finished_semaphore_len; i++) {
         vkDestroySemaphore(graphics_state -> device, graphics_state -> swapchain_render_finished_semaphore_array[i], NULL);
     }
+    graphics_state -> swapchain_render_finished_semaphore_len = 0;
 destroy_image_semaphores:
-    for(int i = 0; i < graphics_state -> swapchain_in_flight_fence_len; i++) {
+    for(int i = 0; i < graphics_state -> swapchain_image_available_semaphore_len; i++) {
         vkDestroySemaphore(graphics_state -> device, graphics_state -> swapchain_image_available_semaphore_array[i], NULL);
     }
+    graphics_state -> swapchain_image_available_semaphore_len = 0;
 destroy_pipeline:
     vkDestroyPipeline(graphics_state -> device, graphics_state -> pipeline, NULL);
 destroy_pipeline_layout:
@@ -806,21 +938,22 @@ destroy_fragment_shader_module:
     vkDestroyShaderModule(graphics_state -> device, graphics_state -> fragment_shader_module, NULL);
 destroy_vertex_shader_module:
     vkDestroyShaderModule(graphics_state -> device, graphics_state -> vertex_shader_module, NULL);
-destroy_frame_buffers:
+destroy_framebuffers:
     for (int i = 0; i < graphics_state -> framebuffer_len; i++) {
         vkDestroyFramebuffer(graphics_state -> device, graphics_state -> framebuffer_array[i], NULL);
     }
-destroy_image_views:
-    for(int i = 0; i < graphics_state -> swapchain_image_view_len; i++) {
-        VkImageView image_view = graphics_state -> swapchain_image_view_array[i];
-        vkDestroyImageView(graphics_state -> device, image_view, NULL);
-    }
+    graphics_state -> framebuffer_len = 0;
 destroy_render_pass:
     vkDestroyRenderPass(graphics_state -> device, graphics_state -> render_pass, NULL);
 free_command_buffers:
     vkFreeCommandBuffers(graphics_state -> device, graphics_state -> command_pool, 1, &graphics_state -> command_buffer);
 destroy_command_pool:
     vkDestroyCommandPool(graphics_state -> device, graphics_state -> command_pool, NULL);
+destroy_image_views:
+    for(int i = 0; i < graphics_state -> swapchain_image_view_len; i++) {
+        vkDestroyImageView(graphics_state -> device, graphics_state -> swapchain_image_view_array[i], NULL);
+    }
+    graphics_state -> swapchain_image_view_len = 0;
 destory_swapchain:
     vkDestroySwapchainKHR(graphics_state -> device, graphics_state -> swapchain, NULL);
 destroy_surface:
@@ -840,12 +973,15 @@ void cleanup(struct graphics_state *graphics_state) {
     for(int i = 0; i < graphics_state -> swapchain_in_flight_fence_len; i++) {
         vkDestroyFence(graphics_state -> device, graphics_state -> swapchain_in_flight_fence_array[i], NULL);
     }
-    for(int i = 0; i < graphics_state -> swapchain_in_flight_fence_len; i++) {
+    graphics_state -> swapchain_in_flight_fence_len = 0;
+    for(int i = 0; i < graphics_state -> swapchain_render_finished_semaphore_len; i++) {
         vkDestroySemaphore(graphics_state -> device, graphics_state -> swapchain_render_finished_semaphore_array[i], NULL);
     }
-    for(int i = 0; i < graphics_state -> swapchain_in_flight_fence_len; i++) {
+    graphics_state -> swapchain_render_finished_semaphore_len = 0;
+    for(int i = 0; i < graphics_state -> swapchain_image_available_semaphore_len; i++) {
         vkDestroySemaphore(graphics_state -> device, graphics_state -> swapchain_image_available_semaphore_array[i], NULL);
     }
+    graphics_state -> swapchain_image_available_semaphore_len = 0;
     vkDestroyPipeline(graphics_state -> device, graphics_state -> pipeline, NULL);
     vkDestroyPipelineLayout(graphics_state -> device, graphics_state -> pipeline_layout, NULL);
     vkDestroyShaderModule(graphics_state -> device, graphics_state -> fragment_shader_module, NULL);
@@ -854,16 +990,18 @@ void cleanup(struct graphics_state *graphics_state) {
         vkFreeMemory(graphics_state -> device, graphics_state -> buffer_array[i].memory, NULL);
         vkDestroyBuffer(graphics_state -> device, graphics_state -> buffer_array[i].buffer, NULL);
     }
-    
+    graphics_state -> buffer_len = 0;
     for (int i = 0; i < graphics_state -> framebuffer_len; i++) {
         vkDestroyFramebuffer(graphics_state -> device, graphics_state -> framebuffer_array[i], NULL);
     }
-    for(int i = 0; i < graphics_state -> swapchain_image_view_len; i++) {
-        vkDestroyImageView(graphics_state -> device, graphics_state -> swapchain_image_view_array[i], NULL);
-    }
+    graphics_state -> framebuffer_len = 0;
     vkDestroyRenderPass(graphics_state -> device, graphics_state -> render_pass, NULL);
     vkFreeCommandBuffers(graphics_state -> device, graphics_state -> command_pool, 1, &graphics_state -> command_buffer);
     vkDestroyCommandPool(graphics_state -> device, graphics_state -> command_pool, NULL);
+    for(int i = 0; i < graphics_state -> swapchain_image_view_len; i++) {
+        vkDestroyImageView(graphics_state -> device, graphics_state -> swapchain_image_view_array[i], NULL);
+    }
+    graphics_state -> swapchain_image_view_len = 0;
     vkDestroySwapchainKHR(graphics_state -> device, graphics_state -> swapchain, NULL);
     vkDestroySurfaceKHR(graphics_state -> instance, graphics_state -> surface, NULL);
     glfwDestroyWindow(graphics_state -> window);
