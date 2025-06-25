@@ -59,6 +59,10 @@ struct graphics_state {
     uint32_t buffer_len;
     VkShaderModule vertex_shader_module;
     VkShaderModule fragment_shader_module;
+    VkDescriptorSetLayout descriptor_set_layout;
+    VkDescriptorPool descriptor_pool;
+    VkDescriptorSet* descriptor_set_array;
+    uint32_t descriptor_set_len;
     VkPipelineLayout pipeline_layout;
     VkPipeline pipeline;
 };
@@ -279,9 +283,9 @@ int create_graphics_state(struct graphics_state *graphics_state) {
     const char** glfw_extension_array = malloc(sizeof(char*) * glfw_extension_len);
     glfw_extension_array = glfwGetRequiredInstanceExtensions(&glfw_extension_len);
     //extensions[instance_extension_count] = "VK_KHR_swapchain";
-    for(int i = 0; i < graphics_state -> extension_num; i++) {
-        printf("%s\n", graphics_state -> extension_array[i]);
-    }
+    //for(int i = 0; i < graphics_state -> extension_num; i++) {
+    //    printf("%s\n", graphics_state -> extension_array[i]);
+    //}
     printf("%s", "GLFW initialized\n");
     
     uint32_t layer_count = 1;
@@ -759,20 +763,76 @@ int create_graphics_state(struct graphics_state *graphics_state) {
     };
     VkPipelineColorBlendAttachmentState color_blend_attachment_array[1] = {color_blend_attachment};
 
+    VkDescriptorSetLayoutBinding uniform_buffer_object_binding = (VkDescriptorSetLayoutBinding) {
+        .binding = 0,
+        .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+        .descriptorCount = 1,
+        .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
+        .pImmutableSamplers = NULL
+    };
+
+    handle_error(vkCreateDescriptorSetLayout(
+        graphics_state -> device,
+        &(VkDescriptorSetLayoutCreateInfo) {
+            .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+            .pNext = NULL,
+            .flags = 0x0,
+            .bindingCount = 1,
+            .pBindings = &uniform_buffer_object_binding
+        },
+        NULL,
+        &graphics_state -> descriptor_set_layout
+    ), destroy_fragment_shader_module);
+    VkDescriptorSetLayout* descriptor_set_layout_array = malloc(sizeof(VkDescriptorSetLayout) * graphics_state -> swapchain_image_len);
+    for (int i = 0; i < graphics_state -> swapchain_image_len; i++) {
+        descriptor_set_layout_array[i] = graphics_state -> descriptor_set_layout;
+    }
+
+    handle_error(vkCreateDescriptorPool(
+        graphics_state -> device,
+        &(VkDescriptorPoolCreateInfo) {
+            .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+            .pNext = NULL,
+            .flags = 0x0,
+            .maxSets = graphics_state -> swapchain_image_len,
+            .poolSizeCount = 1,
+            .pPoolSizes = &(VkDescriptorPoolSize) {
+                .type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+                .descriptorCount = graphics_state -> swapchain_image_len
+            }
+        },
+        NULL,
+        &graphics_state -> descriptor_pool
+    ), destroy_descriptor_set_layout);
+
+    graphics_state -> descriptor_set_len = graphics_state -> swapchain_image_len;
+    graphics_state -> descriptor_set_array = malloc(sizeof(VkDescriptorSet) * graphics_state -> descriptor_set_len);
+    handle_error(vkAllocateDescriptorSets(
+        graphics_state -> device,
+        &(VkDescriptorSetAllocateInfo) {
+            .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+            .pNext = NULL,
+            .descriptorPool = graphics_state -> descriptor_pool,
+            .descriptorSetCount = graphics_state -> swapchain_image_len,
+            .pSetLayouts = descriptor_set_layout_array
+        },
+        graphics_state -> descriptor_set_array
+    ), destroy_descriptor_pool);
+
     handle_error(vkCreatePipelineLayout(
         graphics_state -> device,
         &(VkPipelineLayoutCreateInfo) {
             .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
             .pNext = NULL,
             .flags = 0x0,
-            .setLayoutCount = 0,
-            .pSetLayouts = NULL,
+            .setLayoutCount = 1,
+            .pSetLayouts = &graphics_state -> descriptor_set_layout,
             .pushConstantRangeCount = 0,
             .pPushConstantRanges = NULL,
         },
         NULL,
         &graphics_state -> pipeline_layout
-    ), destroy_fragment_shader_module);
+    ), destroy_descriptor_pool);
 
     handle_error(vkCreateGraphicsPipelines( // The big one
         graphics_state -> device,
@@ -939,6 +999,10 @@ destroy_pipeline:
     vkDestroyPipeline(graphics_state -> device, graphics_state -> pipeline, NULL);
 destroy_pipeline_layout:
     vkDestroyPipelineLayout(graphics_state -> device, graphics_state -> pipeline_layout, NULL);
+destroy_descriptor_pool:
+    vkDestroyDescriptorPool(graphics_state -> device, graphics_state -> descriptor_pool, NULL);
+destroy_descriptor_set_layout:
+    vkDestroyDescriptorSetLayout(graphics_state -> device, graphics_state -> descriptor_set_layout, NULL);
 destroy_fragment_shader_module:
     vkDestroyShaderModule(graphics_state -> device, graphics_state -> fragment_shader_module, NULL);
 destroy_vertex_shader_module:
@@ -990,6 +1054,8 @@ void cleanup(struct graphics_state *graphics_state) {
     graphics_state -> swapchain_image_available_semaphore_len = 0;
     vkDestroyPipeline(graphics_state -> device, graphics_state -> pipeline, NULL);
     vkDestroyPipelineLayout(graphics_state -> device, graphics_state -> pipeline_layout, NULL);
+    vkDestroyDescriptorPool(graphics_state -> device, graphics_state -> descriptor_pool, NULL);
+    vkDestroyDescriptorSetLayout(graphics_state -> device, graphics_state -> descriptor_set_layout, NULL);
     vkDestroyShaderModule(graphics_state -> device, graphics_state -> fragment_shader_module, NULL);
     vkDestroyShaderModule(graphics_state -> device, graphics_state -> vertex_shader_module, NULL);
     for (int i = 0; i < graphics_state -> buffer_len; i++) {
