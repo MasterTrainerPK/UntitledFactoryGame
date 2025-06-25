@@ -8,6 +8,7 @@
 #include <GLFW/glfw3.h>
 #include <vulkan/vulkan_core.h>
 #include "error_handling.h"
+#include "cglm/cglm.h"
 
 void error_handle_glfw(int e, const char* msg) {
     fprintf(stderr, "GLFW ERR: %d, MSG: %s", e, msg);
@@ -878,7 +879,7 @@ int create_graphics_state(struct graphics_state *graphics_state) {
                 .rasterizerDiscardEnable = VK_FALSE,
                 .polygonMode = VK_POLYGON_MODE_FILL,
                 .cullMode = VK_CULL_MODE_BACK_BIT,
-                .frontFace = VK_FRONT_FACE_CLOCKWISE,
+                .frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE,
                 .depthBiasEnable = VK_FALSE,
                 .depthBiasConstantFactor = 0.0f,
                 .depthBiasClamp = 0.0f,

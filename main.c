@@ -9,30 +9,7 @@
 #include <vulkan/vulkan_core.h>
 #include "error_handling.h"
 #include "graphics_handling.h"
-
-float *transform_vector(float *matrix, float *vector, int dimension) {
-    float *new_vector = malloc(sizeof(float) * dimension);
-    for (int a = 0; a < dimension; a++) {
-        new_vector[a] = 0.0f;
-        for (int b = 0; b < dimension; b++) {
-            new_vector[a] += matrix[a * dimension + b] * vector[b];
-        }
-    }
-    return new_vector;
-}
-
-float *transform_matrix(float *matrix_1, float *matrix_2, int dimension) {
-    float *new_matrix = malloc(sizeof(float) * dimension * dimension);
-    for (int a = 0; a < dimension; a++) {
-        for (int b = 0; b < dimension; b++) {
-            new_matrix[a * dimension + b] = 0.0f;
-            for (int c = 0; c < dimension; c++) {
-                new_matrix[a * dimension + b] += matrix_1[a * dimension + c] * matrix_2[c * dimension + b];
-            };
-        }
-    }
-    return new_matrix;
-}
+#include "cglm/cglm.h"
 
 int main() {
     int error_code = EXIT_SUCCESS;
@@ -42,9 +19,7 @@ int main() {
     create_graphics_state(&graphics);
 
     int vertex_count = 36;
-    int vertex_dim = 3;
-    int vertex_color = 3;
-    int vertex_size = vertex_dim + vertex_color;
+    int vertex_size = 6;
 
     struct graphics_buffer vertex_buffer;
     create_graphics_buffer(&graphics, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, sizeof(float) * vertex_size * vertex_count, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &vertex_buffer);
@@ -57,7 +32,7 @@ int main() {
     VkWriteDescriptorSet* uniform_buffer_write_array = malloc(sizeof(VkWriteDescriptorSet) * graphics.swapchain_image_len);
 
     for (int i = 0; i < graphics.swapchain_image_len; i++) {
-        create_graphics_buffer(&graphics, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, sizeof(float) * 16, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &uniform_buffer_array[i]);
+        create_graphics_buffer(&graphics, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, sizeof(mat4), VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &uniform_buffer_array[i]);
         vkMapMemory(graphics.device, uniform_buffer_array[i].memory, 0, uniform_buffer_array[i].size, 0x0, &uniform_buffer_data_array[i]);
 
         uniform_buffer_write_array[i] = (VkWriteDescriptorSet) {
@@ -177,10 +152,11 @@ int main() {
         //printf("%s", "Image acquired\n");
         vkResetFences(graphics.device, 1, &graphics.swapchain_in_flight_fence_array[current_frame]);
 
-        float camera_position[3] = {0.0f, 0.0f, 1.5f};
+        float camera_position[3] = {0.0f, 0.0f, -2.0f};
 
-        double theta = ((double)curr_time.tv_nsec / 1000000000.0 + (double)curr_time.tv_sec);
+        float theta = ((float)curr_time.tv_nsec / 1000000000.0f + (float)curr_time.tv_sec);
 
+        /*
         float rotation_matrix_x[16] = {
             1.0f, 0.0f, 0.0f, 0.0f,
             0.0f, (float)cos(theta), (float)cos(theta + 3.1415 * 0.5), 0.0f,
@@ -211,7 +187,7 @@ int main() {
 
         float window_aspect = graphics.image_extent.width / graphics.image_extent.height;
         float camera_fov = 90.0f;
-        float near_plane = 0.0f;
+        float near_plane = 0.5f;
         float far_plane = 1.0f;
         float projection_matrix[16] = {
             1.0f / (window_aspect * tanf(camera_fov / 2.0f)), 0.0f, 0.0f, 0.0f,
@@ -225,6 +201,34 @@ int main() {
         //final_matrix = transform_matrix(rotation_matrix_z, final_matrix, 4);
         //final_matrix = transform_matrix(translation_matrix, final_matrix, 4);
         final_matrix = transform_matrix(projection_matrix, final_matrix, 4);
+        */
+
+        float empty_matrix_values[16] = {
+            1.0f, 0.0f, 0.0f, 0.0f,
+            0.0f, 1.0f, 0.0f, 0.0f,
+            0.0f, 0.0f, 1.0f, 0.0f,
+            0.0f, 0.0f, 0.0f, 1.0f
+        };
+
+        mat4 model_matrix;
+        glm_mat4_make(empty_matrix_values, model_matrix);
+        glm_rotate_x(model_matrix, theta, model_matrix);
+        glm_rotate_y(model_matrix, theta, model_matrix);
+        glm_rotate_z(model_matrix, theta, model_matrix);
+
+        mat4 view_matrix;
+        glm_mat4_make(empty_matrix_values, view_matrix);
+        float center[3] = {0.0f, 0.0f, 0.0f};
+        float up_vector[3] = {0.0f, -1.0f, 0.0f};
+        glm_lookat(camera_position, center, up_vector, view_matrix);
+
+        mat4 projection_matrix;
+        glm_mat4_make(empty_matrix_values, projection_matrix);
+        glm_perspective(45.0f, graphics.image_extent.width / graphics.image_extent.height, 0.1f, 10.0f, projection_matrix);
+
+        mat4 final_matrix;
+        glm_mat4_mul(projection_matrix, view_matrix, final_matrix);
+        glm_mat4_mul(final_matrix, model_matrix, final_matrix);
 
         memcpy(uniform_buffer_data_array[current_frame], final_matrix, uniform_buffer_array[current_frame].size);
         vkUpdateDescriptorSets(graphics.device, 1, &uniform_buffer_write_array[current_frame], 0, NULL);
