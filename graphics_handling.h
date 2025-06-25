@@ -23,7 +23,7 @@ struct graphics_buffer {
 
 struct graphics_state {
     VkResult last_error;
-    const char** extension_array;
+    VkExtensionProperties* extension_array;
     uint32_t extension_num;
     VkInstance instance;
     VkPhysicalDevice* physical_device_array;
@@ -274,17 +274,13 @@ int create_graphics_state(struct graphics_state *graphics_state) {
         goto exit_GLFW;
     }
 
-    {
-        const char** glfw_extensions = glfwGetRequiredInstanceExtensions(&graphics_state -> extension_num);
-        graphics_state -> extension_array = malloc(sizeof(char*) * graphics_state -> extension_num + 0);
-        for(int i = 0; i < graphics_state -> extension_num; i++) {
-            graphics_state -> extension_array[i] = glfw_extensions[i];
-        }
-        //extensions[instance_extension_count] = "VK_KHR_swapchain";
-        printf("%s", "Loading extensions\n");
-        for(int i = 0; i < graphics_state -> extension_num; i++) {
-            printf("%s\n", graphics_state -> extension_array[i]);
-        }
+    uint32_t glfw_extension_len;
+    glfwGetRequiredInstanceExtensions(&glfw_extension_len);
+    const char** glfw_extension_array = malloc(sizeof(char*) * glfw_extension_len);
+    glfw_extension_array = glfwGetRequiredInstanceExtensions(&glfw_extension_len);
+    //extensions[instance_extension_count] = "VK_KHR_swapchain";
+    for(int i = 0; i < graphics_state -> extension_num; i++) {
+        printf("%s\n", graphics_state -> extension_array[i]);
     }
     printf("%s", "GLFW initialized\n");
     
@@ -306,8 +302,8 @@ int create_graphics_state(struct graphics_state *graphics_state) {
             },
             .enabledLayerCount = layer_count,
             .ppEnabledLayerNames = layers,
-            .enabledExtensionCount = graphics_state -> extension_num,
-            .ppEnabledExtensionNames = graphics_state -> extension_array
+            .enabledExtensionCount = glfw_extension_len,
+            .ppEnabledExtensionNames = glfw_extension_array
         }, 
         NULL, 
         &graphics_state -> instance
@@ -376,6 +372,14 @@ int create_graphics_state(struct graphics_state *graphics_state) {
         &graphics_state -> device
     ), destroy_instance);
     printf("%s", "Device created\n");
+
+    printf("%s", "Loading extensions\n");
+    vkEnumerateDeviceExtensionProperties(graphics_state -> physical_device, NULL, &graphics_state -> extension_num, NULL);
+    graphics_state -> extension_array = malloc(sizeof(VkExtensionProperties) * graphics_state -> extension_num);
+    vkEnumerateDeviceExtensionProperties(graphics_state -> physical_device, NULL, &graphics_state -> extension_num, graphics_state -> extension_array);
+    for(int i = 0; i < graphics_state -> extension_num; i++) {
+        printf("%s\n", graphics_state -> extension_array[i].extensionName);
+    }
 
     graphics_state -> monitor = glfwGetPrimaryMonitor();
     //FIXME: give this a fallback
