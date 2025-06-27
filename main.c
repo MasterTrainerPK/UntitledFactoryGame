@@ -154,7 +154,7 @@ int main() {
 
         float camera_position[3] = {0.0f, 0.0f, -2.0f};
 
-        float theta = ((float)curr_time.tv_nsec / 1000000000.0f + (float)curr_time.tv_sec);
+        float theta = (float)fmod((double)curr_time.tv_nsec / 1000000000.0 + (double)curr_time.tv_sec, 3.1415 * 2);
 
         /*
         float rotation_matrix_x[16] = {
