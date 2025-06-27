@@ -224,7 +224,7 @@ int main() {
 
         mat4 projection_matrix;
         glm_mat4_make(empty_matrix_values, projection_matrix);
-        glm_perspective(45.0f, graphics.image_extent.width / graphics.image_extent.height, 0.1f, 10.0f, projection_matrix);
+        glm_perspective(45.0f, (float)graphics.image_extent.width / (float)graphics.image_extent.height, 0.1f, 10.0f, projection_matrix);
 
         mat4 final_matrix;
         glm_mat4_mul(projection_matrix, view_matrix, final_matrix);
@@ -232,6 +232,19 @@ int main() {
 
         memcpy(uniform_buffer_data_array[current_frame], final_matrix, uniform_buffer_array[current_frame].size);
         vkUpdateDescriptorSets(graphics.device, 1, &uniform_buffer_write_array[current_frame], 0, NULL);
+
+        VkViewport viewport = (VkViewport) {
+            .x = 0.0f,
+            .y = 0.0f,
+            .width = graphics.image_extent.width,
+            .height = graphics.image_extent.height,
+            .minDepth = 0.0f,
+            .maxDepth = 1.0f
+        };
+        VkRect2D scissor = (VkRect2D) {
+            .offset = {0, 0},
+            .extent = graphics.image_extent
+        };
 
         handle_error(vkBeginCommandBuffer(
             graphics.command_buffer,
@@ -280,6 +293,8 @@ int main() {
         VkDeviceSize offsets[1] = {0};
         vkCmdBindVertexBuffers(graphics.command_buffer, 0, 1, &vertex_buffer.buffer, offsets);
         vkCmdBindDescriptorSets(graphics.command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphics.pipeline_layout, 0, 1, &graphics.descriptor_set_array[current_frame], 0, NULL);
+        vkCmdSetViewport(graphics.command_buffer, 0, 1, &viewport);
+        vkCmdSetScissor(graphics.command_buffer, 0, 1, &scissor);
         vkCmdDraw(graphics.command_buffer, vertex_count, 1, 0, 0);
         vkCmdEndRenderPass(graphics.command_buffer);
         vkEndCommandBuffer(graphics.command_buffer);

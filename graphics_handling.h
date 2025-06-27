@@ -739,19 +739,6 @@ int create_graphics_state(struct graphics_state *graphics_state) {
     VkPipelineShaderStageCreateInfo shader_stage_array[2] = {vertex_shader_stage, fragment_shader_stage};
     printf("%s", "Shaders created\n");
 
-    VkViewport viewport = (VkViewport) {
-        .x = 0.0f,
-        .y = 0.0f,
-        .width = width,
-        .height = height,
-        .minDepth = 0.0f,
-        .maxDepth = 1.0f
-    };
-    VkRect2D scissor = (VkRect2D) {
-        .offset = {0, 0},
-        .extent = graphics_state -> image_extent
-    };
-
     VkPipelineColorBlendAttachmentState color_blend_attachment = (VkPipelineColorBlendAttachmentState) {
         .blendEnable = VK_FALSE,
         .srcColorBlendFactor = VK_BLEND_FACTOR_ONE,
@@ -835,6 +822,9 @@ int create_graphics_state(struct graphics_state *graphics_state) {
         &graphics_state -> pipeline_layout
     ), destroy_descriptor_pool);
 
+    VkDynamicState dynamic_state_array[2] = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
+    uint32_t dynamic_state_len = 2;
+
     handle_error(vkCreateGraphicsPipelines( // The big one
         graphics_state -> device,
         VK_NULL_HANDLE,
@@ -867,9 +857,9 @@ int create_graphics_state(struct graphics_state *graphics_state) {
                 .pNext = NULL,
                 .flags = 0x0,
                 .viewportCount = 1,
-                .pViewports = &viewport,
+                .pViewports = NULL,
                 .scissorCount = 1,
-                .pScissors = &scissor
+                .pScissors = NULL
             },
             .pRasterizationState = &(VkPipelineRasterizationStateCreateInfo) {
                 .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
@@ -912,8 +902,8 @@ int create_graphics_state(struct graphics_state *graphics_state) {
                 .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
                 .pNext = NULL,
                 .flags = 0x0,
-                .dynamicStateCount = 0,
-                .pDynamicStates = NULL
+                .dynamicStateCount = dynamic_state_len,
+                .pDynamicStates = dynamic_state_array
             },
             .layout = graphics_state -> pipeline_layout,
             .renderPass = graphics_state -> render_pass,
