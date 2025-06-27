@@ -8,7 +8,7 @@
 #include <GLFW/glfw3.h>
 #include <vulkan/vulkan_core.h>
 #include "error_handling.h"
-#include "graphics_handling.h"
+#include "graphics_handling.c"
 
 float *transform_vector(float *matrix, float *vector, int dimension) {
     float *new_vector = malloc(sizeof(float) * dimension);
