@@ -134,6 +134,70 @@ exit_function:
     return error_code;
 }
 
+int copy_graphics_buffer(struct graphics_state graphics_state, struct graphics_buffer source_buffer, struct graphics_buffer destination_buffer, unsigned long long size) {
+    printf("%s", "Copying graphics buffer\n");
+    int error_code = EXIT_SUCCESS;
+    VkResult vk_result;
+
+    VkCommandBuffer command_buffer;
+    handle_error(vkAllocateCommandBuffers(
+        graphics_state.device,
+        &(VkCommandBufferAllocateInfo) {
+            .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+            .pNext = NULL,
+            .commandPool = graphics_state.command_pool,
+            .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+            .commandBufferCount = 1
+        },
+        &command_buffer
+    ), exit_function);
+
+    handle_error(vkBeginCommandBuffer(
+        command_buffer,
+        &(VkCommandBufferBeginInfo) {
+            .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+            .pNext = NULL,
+            .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+            .pInheritanceInfo = NULL,
+        }
+    ), free_command_buffer);
+
+    VkBufferCopy copy_region = (VkBufferCopy) {
+        .srcOffset = 0,
+        .dstOffset = 0,
+        .size = size
+    };
+
+    vkCmdCopyBuffer(command_buffer, source_buffer.buffer, destination_buffer.buffer, 1, &copy_region);
+    vkEndCommandBuffer(command_buffer);
+
+    vkQueueSubmit(
+        graphics_state.queue,
+        1,
+            &(VkSubmitInfo) {
+            .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+            .pNext = NULL,
+            .waitSemaphoreCount = 0,
+            .pWaitSemaphores = NULL,
+            .pWaitDstStageMask = NULL,
+            .commandBufferCount = 1,
+            .pCommandBuffers = &command_buffer,
+            .signalSemaphoreCount = 0,
+            .pSignalSemaphores = NULL
+        },
+        VK_NULL_HANDLE
+    );
+    vkQueueWaitIdle(graphics_state.queue);
+    vkFreeCommandBuffers(graphics_state.device, graphics_state.command_pool, 1, &command_buffer);
+
+    return error_code;
+
+free_command_buffer:
+    vkFreeCommandBuffers(graphics_state.device, graphics_state.command_pool, 1, &command_buffer);
+exit_function:
+    return error_code;
+}
+
 int recreate_swapchain(struct graphics_state *graphics_state) {
     printf("%s", "Recreating swapchain\n");
     int error_code = EXIT_SUCCESS;

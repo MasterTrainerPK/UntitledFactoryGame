@@ -21,11 +21,14 @@ int main() {
     int vertex_count = 36;
     int vertex_size = 6;
 
-    struct graphics_buffer vertex_buffer;
-    create_graphics_buffer(&graphics, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, sizeof(float) * vertex_size * vertex_count, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &vertex_buffer);
+    struct graphics_buffer vertex_staging_buffer;
+    create_graphics_buffer(&graphics, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, sizeof(float) * vertex_size * vertex_count, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &vertex_staging_buffer);
 
-    void* vertex_buffer_data;
-    vkMapMemory(graphics.device, vertex_buffer.memory, 0, vertex_buffer.size, 0x0, &vertex_buffer_data);
+    struct graphics_buffer vertex_buffer;
+    create_graphics_buffer(&graphics, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, sizeof(float) * vertex_size * vertex_count, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, &vertex_buffer);
+
+    void* vertex_staging_buffer_data;
+    vkMapMemory(graphics.device, vertex_staging_buffer.memory, 0, vertex_staging_buffer.size, 0x0, &vertex_staging_buffer_data);
 
     struct graphics_buffer* uniform_buffer_array = malloc(sizeof(struct graphics_buffer) * graphics.swapchain_image_len);
     void** uniform_buffer_data_array = malloc(sizeof(void) * graphics.swapchain_image_len);
@@ -105,7 +108,8 @@ int main() {
         0.5f,  0.5f,  0.5f,  1.0f,  1.0f,  1.0f,
     };
 
-    memcpy(vertex_buffer_data, vertices, vertex_buffer.size);
+    memcpy(vertex_staging_buffer_data, vertices, vertex_staging_buffer.size);
+    copy_graphics_buffer(graphics, vertex_staging_buffer, vertex_buffer, vertex_staging_buffer.size);
 
     uint32_t current_frame = 0;
 
