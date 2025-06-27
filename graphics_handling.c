@@ -279,9 +279,6 @@ int create_graphics_state(struct graphics_state *graphics_state) {
     const char** glfw_extension_array = malloc(sizeof(char*) * glfw_extension_len);
     glfw_extension_array = glfwGetRequiredInstanceExtensions(&glfw_extension_len);
     //extensions[instance_extension_count] = "VK_KHR_swapchain";
-    for(int i = 0; i < graphics_state->extension_num; i++) {
-        printf("%s\n", graphics_state->extension_array[i]);
-    }
     printf("%s", "GLFW initialized\n");
     
     uint32_t layer_count = 1;
