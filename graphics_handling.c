@@ -764,8 +764,12 @@ int create_graphics_state(struct graphics_state *graphics_state) {
             .flags = 0x0,
             .setLayoutCount = 0,
             .pSetLayouts = NULL,
-            .pushConstantRangeCount = 0,
-            .pPushConstantRanges = NULL,
+            .pushConstantRangeCount = 1,
+            .pPushConstantRanges = &(VkPushConstantRange) {
+                .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
+                .offset = 0,
+                .size = sizeof(float) * 16
+            },
         },
         NULL,
         &graphics_state->pipeline_layout

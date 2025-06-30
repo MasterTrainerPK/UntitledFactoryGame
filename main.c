@@ -21,6 +21,19 @@ float *transform_vector(float *matrix, float *vector, int dimension) {
     return new_vector;
 }
 
+float *transform_matrix(float *matrix_1, float *matrix_2, int dimension) {
+    float *new_matrix = malloc(sizeof(float) * dimension * dimension);
+    for (int a = 0; a < dimension; a++) {
+        for (int b = 0; b < dimension; b++) {
+            new_matrix[a * dimension + b] = 0.0f;
+            for (int c = 0; c < dimension; c++) {
+                new_matrix[a * dimension + b] += matrix_1[a * dimension + c] * matrix_2[c * dimension + b];
+            };
+        }
+    }
+    return new_matrix;
+}
+
 int main() {
     int error_code = EXIT_SUCCESS;
     VkResult vk_result;
@@ -90,6 +103,8 @@ int main() {
         -0.5f, 0.5f,  -0.5f, 0.0f,  1.0f,  0.0f,
         0.5f,  0.5f,  0.5f,  1.0f,  1.0f,  1.0f,
     };
+
+    memcpy(data, vertices, vertex_buffer.size);
 
     uint32_t current_frame = 0;
 
@@ -161,31 +176,29 @@ int main() {
             0.0f, 0.0f, 0.0f, 1.0f
         };
 
-        float transformed_vertices[252];
+        float translation_matrix[16] = {
+            1.0f, 0.0f, 0.0f, camera_position[0],
+            0.0f, 1.0f, 0.0f, camera_position[1],
+            0.0f, 0.0f, 1.0f, camera_position[2],
+            0.0f, 0.0f, 0.0f, 1.0f
+        };
 
-        // Carry over the color
-        for (int i = 0; i < vertex_count; i++) {
-            transformed_vertices[i * vertex_size + 3] = vertices[i * vertex_size + 3];
-            transformed_vertices[i * vertex_size + 4] = vertices[i * vertex_size + 4];
-            transformed_vertices[i * vertex_size + 5] = vertices[i * vertex_size + 5];
-        }
+        float window_aspect = graphics.image_extent.width / graphics.image_extent.height;
+        float camera_fov = 90.0f;
+        float near_plane = 0.0f;
+        float far_plane = 1.0f;
+        float projection_matrix[16] = {
+            1.0f / (window_aspect * tanf(camera_fov / 2.0f)), 0.0f, 0.0f, 0.0f,
+            0.0f, 1.0f / tanf(camera_fov / 2.0f), 0.0f, 0.0f,
+            0.0f, 0.0f, (-near_plane - far_plane) / (near_plane - far_plane), (2.0f * near_plane * far_plane) / (near_plane - far_plane),
+            0.0f, 0.0f, 1.0f, 0.0f
+        };
         
-        for (int a = 0; a < vertex_count; a++) {
-            float *vector = malloc(sizeof(float) * vertex_dim);
-            for (int b = 0; b < vertex_dim; b++) {
-                vector[b] = vertices[a * vertex_size + b];
-            }
-            vector[vertex_dim] = 1.0f;
-
-            float *new_vector = transform_vector(rotation_matrix_x, vector, vertex_dim + 1);
-            new_vector = transform_vector(rotation_matrix_y, new_vector, vertex_dim + 1);
-            new_vector = transform_vector(rotation_matrix_z, new_vector, vertex_dim + 1);
-            for (int b = 0; b < vertex_dim; b++) {
-                transformed_vertices[a * vertex_size + b] = new_vector[b] + camera_position[b];
-            }
-        }
-
-        memcpy(data, transformed_vertices, vertex_buffer.size);
+        float* final_matrix = rotation_matrix_y;
+        final_matrix = transform_matrix(translation_matrix, final_matrix, 4);
+        //final_matrix = transform_matrix(rotation_matrix_z, final_matrix, 4);
+        //final_matrix = transform_matrix(translation_matrix, final_matrix, 4);
+        final_matrix = transform_matrix(projection_matrix, final_matrix, 4);
 
         handle_error(vkBeginCommandBuffer(
             graphics.command_buffer,
@@ -233,6 +246,7 @@ int main() {
         vkCmdBindPipeline(graphics.command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphics.pipeline);
         VkDeviceSize offsets[1] = {0};
         vkCmdBindVertexBuffers(graphics.command_buffer, 0, 1, &vertex_buffer.buffer, offsets);
+        vkCmdPushConstants(graphics.command_buffer, graphics.pipeline_layout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(float) * 16, final_matrix);
         vkCmdDraw(graphics.command_buffer, vertex_count, 1, 0, 0);
         vkCmdEndRenderPass(graphics.command_buffer);
         vkEndCommandBuffer(graphics.command_buffer);
